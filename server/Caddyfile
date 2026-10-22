@@ -1,0 +1,27 @@
+# Replace :80 with your domain (e.g., share.yourdomain.com) for automatic free HTTPS via Let's Encrypt
+:80 {
+    # Serve static viewer HTML
+    root * /srv/www
+
+    # Route WHEP & WHIP WebRTC endpoints directly to MediaMTX
+    @webrtc path_regexp webrtc ^/([^/]+)/(whip|whep)(/.*)?$
+    handle @webrtc {
+        reverse_proxy 127.0.0.1:8889 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Room links: /r/{room_id} serves index.html
+    @room path_regexp room ^/r/([^/]+)/?$
+    handle @room {
+        rewrite * /index.html
+        file_server
+    }
+
+    # Default file server
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}

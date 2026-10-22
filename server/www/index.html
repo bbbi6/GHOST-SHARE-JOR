@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GHOST SHARE JOR — LIVE</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%236366f1'/><circle cx='38' cy='45' r='6' fill='%23000'/><circle cx='62' cy='45' r='6' fill='%23000'/></svg>">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: #09090b;
+      color: #fafafa;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .video-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #18181b 0%, #09090b 100%);
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background-color: #000;
+    }
+    /* Ghost Loading / Waiting Screen */
+    .overlay-status {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9, 9, 11, 0.85);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      transition: opacity 0.3s ease;
+    }
+    .overlay-status.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ghost-ring {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 2px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+      margin-bottom: 24px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .status-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      color: #fafafa;
+    }
+    .status-desc {
+      font-size: 0.875rem;
+      color: #a1a1aa;
+    }
+    /* Tap to Unmute Overlay */
+    .unmute-btn {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(99, 102, 241, 0.9);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+      z-index: 20;
+      border: none;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .unmute-btn:hover {
+      background: #4f46e5;
+      transform: translateX(-50%) scale(1.05);
+    }
+    .unmute-btn.hidden {
+      display: none;
+    }
+    /* Bottom Controls Bar */
+    .controls-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 16px 24px;
+      background: linear-gradient(to top, rgba(9, 9, 11, 0.9) 0%, transparent 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 15;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .video-container:hover .controls-bar,
+    .controls-bar:focus-within {
+      opacity: 1;
+    }
+    .left-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #ef4444;
+      letter-spacing: 0.08em;
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .room-name {
+      font-size: 0.875rem;
+      color: #d4d4d8;
+      font-weight: 500;
+    }
+    .right-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ctrl-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #fafafa;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8125rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(4px);
+      transition: background 0.2s;
+    }
+    .ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="video-container" id="container">
+    <video id="videoPlayer" playsinline autoplay muted></video>
+
+    <!-- Tap to Unmute Banner (Auto-hidden after unmuted) -->
+    <button class="unmute-btn" id="unmuteBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      Tap to Unmute Audio
+    </button>
+
+    <!-- Loading / Offline Overlay -->
+    <div class="overlay-status" id="overlay">
+      <div class="ghost-ring"></div>
+      <div class="status-title" id="statusTitle">GHOST SHARE JOR</div>
+      <div class="status-desc" id="statusDesc">Connecting to stream...</div>
+    </div>
+
+    <!-- Bottom HUD Bar -->
+    <div class="controls-bar">
+      <div class="left-controls">
+        <div class="live-badge">
+          <div class="live-dot"></div>
+          LIVE
+        </div>
+        <span class="room-name" id="roomLabel">Room: -</span>
+      </div>
+      <div class="right-controls">
+        <button class="ctrl-btn" id="audioToggle">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          Mute
+        </button>
+        <button class="ctrl-btn" id="fullscreenBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          Full
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Extract room id from URL: /r/{room_id} or ?room={room_id}
+    const pathParts = window.location.pathname.split('/');
+    let roomId = pathParts[pathParts.length - 1];
+    if (!roomId || roomId === 'r' || roomId === '') {
+      const urlParams = new URLSearchParams(window.location.search);
+      roomId = urlParams.get('room') || 'default';
+    }
+    document.getElementById('roomLabel').textContent = `Room: ${roomId}`;
+
+    const video = document.getElementById('videoPlayer');
+    const overlay = document.getElementById('overlay');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusDesc = document.getElementById('statusDesc');
+    const unmuteBtn = document.getElementById('unmuteBtn');
+    const audioToggle = document.getElementById('audioToggle');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+    let pc = null;
+    let retryTimeout = null;
+
+    // MediaMTX WHEP Endpoint
+    const whepEndpoint = `${window.location.origin}/${roomId}/whep`;
+
+    async function startWHEP() {
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+
+      statusTitle.textContent = "Connecting...";
+      statusDesc.textContent = `Connecting to room "${roomId}"...`;
+      overlay.classList.remove('hidden');
+
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      pc.ontrack = (event) => {
+        if (!video.srcObject) {
+          if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+          } else {
+            video.srcObject = new MediaStream([event.track]);
+          }
+        } else {
+          if (video.srcObject instanceof MediaStream && !video.srcObject.getTracks().includes(event.track)) {
+            video.srcObject.addTrack(event.track);
+          }
+        }
+        video.play().catch(() => {});
+      };
+
+      video.onloadedmetadata = () => {
+        video.play().catch(() => {});
+      };
+      video.oncanplay = () => {
+        video.play().catch(() => {});
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          overlay.classList.add('hidden');
+          video.play().catch(() => {});
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          statusTitle.textContent = "Host Disconnected";
+          statusDesc.textContent = "Waiting for host to resume stream... Reconnecting in 3s";
+          overlay.classList.remove('hidden');
+          scheduleRetry();
+        }
+      };
+
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // Wait for ICE candidates gathering to complete
+        await new Promise((resolve) => {
+          if (pc.iceGatheringState === 'complete') {
+            resolve();
+          } else {
+            const checkState = () => {
+              if (pc.iceGatheringState === 'complete') {
+                pc.removeEventListener('icegatheringstatechange', checkState);
+                resolve();
+              }
+            };
+            pc.addEventListener('icegatheringstatechange', checkState);
+            setTimeout(resolve, 1500); // 1.5s fallback
+          }
+        });
+
+        const res = await fetch(whepEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/sdp' },
+          body: pc.localDescription.sdp
+        });
+
+        if (!res.ok) {
+          throw new Error(`WHEP Server responded with status ${res.status}`);
+        }
+
+        const answerSdp = await res.text();
+        await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+        // Try playing
+        video.play().catch(() => {
+          // Autoplay was blocked with audio, unmute button handles it
+        });
+
+      } catch (err) {
+        statusTitle.textContent = "Waiting for Host";
+        statusDesc.textContent = "The screen share is not active yet. Retrying in 3s...";
+        overlay.classList.remove('hidden');
+        scheduleRetry();
+      }
+    }
+
+    function scheduleRetry() {
+      clearTimeout(retryTimeout);
+      retryTimeout = setTimeout(startWHEP, 3000);
+    }
+
+    // Audio & Unmute Handling
+    function handleUnmute() {
+      video.muted = false;
+      video.play().then(() => {
+        unmuteBtn.classList.add('hidden');
+        audioToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg> Mute`;
+      }).catch(console.error);
+    }
+
+    unmuteBtn.addEventListener('click', handleUnmute);
+
+    audioToggle.addEventListener('click', () => {
+      video.muted = !video.muted;
+      if (video.muted) {
+        audioToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg> Unmute`;
+      } else {
+        unmuteBtn.classList.add('hidden');
+        audioToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg> Mute`;
+      }
+    });
+
+    // Fullscreen Toggle
+    fullscreenBtn.addEventListener('click', () => {
+      const container = document.getElementById('container');
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(console.error);
+      } else {
+        document.exitFullscreen().catch(console.error);
+      }
+    });
+
+    // Start
+    startWHEP();
+  </script>
+</body>
+</html>

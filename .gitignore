@@ -1,0 +1,24 @@
+# Build outputs & intermediates
+*.obj
+*.res
+*.pdb
+*.ilk
+*.idb
+host-app/src/ghost.res
+host-app/main.obj
+
+# Logs
+*.log
+stream_log.txt
+dist/GhostShareJor/stream_log.txt
+
+# Editor / IDE
+.vscode/
+.vs/
+*.user
+*.suo
+
+# OS generated files
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store

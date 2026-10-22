@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: ghost-share-mediamtx
+    restart: unless-stopped
+    network_mode: "host" # Best performance for WebRTC UDP port handling
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ghost-share-caddy
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./www:/srv/www:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,28 @@
+# MediaMTX Configuration for GHOST SHARE JOR
+logLevel: info
+logDestinations: [stdout]
+
+# WebRTC (WHIP publishing + WHEP viewing)
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no # Caddy handles TLS/HTTPS termination
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: yes
+# Note: In production, add your server public IP / domain below:
+# webrtcAdditionalHosts: [ "your.server.ip.or.domain" ]
+
+# Disable unused protocols to save server resources
+rtsp: no
+rtmp: no
+hls: no
+srt: no
+
+# Dynamic paths for all rooms
+paths:
+  all_others:
+    # Allow publishers to create any room dynamically
+    publishUser: ""
+    publishPass: ""
+    readUser: ""
+    readPass: ""
