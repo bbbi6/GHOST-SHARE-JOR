@@ -114,33 +114,67 @@ static std::wstring get_app_dir() {
     return L".";
 }
 
+static std::wstring g_original_path;
+
 static std::wstring resolve_gst_bin(std::wstring& out_bin_dir) {
     std::wstring app_dir = get_app_dir();
-    
-    // 1. App directory / bin
-    std::wstring c1 = app_dir + L"\\bin\\gst-launch-1.0.exe";
-    if (GetFileAttributesW(c1.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        out_bin_dir = app_dir + L"\\bin";
-        return c1;
-    }
-    
-    // 2. App directory root
-    std::wstring c2 = app_dir + L"\\gst-launch-1.0.exe";
-    if (GetFileAttributesW(c2.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        out_bin_dir = app_dir;
-        return c2;
+    const std::wstring candidates[] = {
+        app_dir + L"\\gst\\bin\\gst-launch-1.0.exe",
+        app_dir + L"\\bin\\gst-launch-1.0.exe",
+        app_dir + L"\\gst-launch-1.0.exe",
+        L"C:\\msys64\\ucrt64\\bin\\gst-launch-1.0.exe",
+    };
+
+    for (const auto& path : candidates) {
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            size_t slash = path.find_last_of(L"\\/");
+            out_bin_dir = (slash == std::wstring::npos) ? app_dir : path.substr(0, slash);
+            return path;
+        }
     }
 
-    // 3. MSYS2 UCRT64 default
-    std::wstring c3 = L"C:\\msys64\\ucrt64\\bin\\gst-launch-1.0.exe";
-    if (GetFileAttributesW(c3.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        out_bin_dir = L"C:\\msys64\\ucrt64\\bin";
-        return c3;
-    }
-
-    // 4. Fallback in PATH
     out_bin_dir = L"";
     return L"gst-launch-1.0.exe";
+}
+
+static void prepare_gst_env(const std::wstring& bin_dir) {
+    if (g_original_path.empty()) {
+        wchar_t old_path[32767] = {};
+        DWORD n = GetEnvironmentVariableW(L"PATH", old_path, 32767);
+        if (n > 0 && n < 32767) g_original_path = old_path;
+    }
+    if (bin_dir.empty()) return;
+
+    std::wstring new_path = bin_dir + L";" + g_original_path;
+    SetEnvironmentVariableW(L"PATH", new_path.c_str());
+
+    std::wstring prefix = bin_dir;
+    size_t slash = prefix.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) prefix = prefix.substr(0, slash);
+    std::wstring plugins = prefix + L"\\lib\\gstreamer-1.0";
+    if (GetFileAttributesW(plugins.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        SetEnvironmentVariableW(L"GST_PLUGIN_SYSTEM_PATH_1_0", plugins.c_str());
+        SetEnvironmentVariableW(L"GST_PLUGIN_PATH_1_0", plugins.c_str());
+    }
+}
+
+static std::string read_log_tail(const std::wstring& path) {
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return "";
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return ""; }
+    long sz = ftell(f);
+    if (sz <= 0) { fclose(f); return ""; }
+    long start = (sz > 500) ? (sz - 500) : 0;
+    fseek(f, start, SEEK_SET);
+    std::string data((size_t)(sz - start), '\0');
+    size_t n = fread(data.data(), 1, data.size(), f);
+    fclose(f);
+    data.resize(n);
+    while (!data.empty() && (data.back() == '\n' || data.back() == '\r' || data.back() == ' ')) data.pop_back();
+    size_t pos = data.find_last_of("\r\n");
+    if (pos != std::string::npos) data = data.substr(pos + 1);
+    if (data.size() > 160) data = data.substr(data.size() - 160);
+    return data;
 }
 
 static void load_config() {
@@ -216,11 +250,14 @@ static void start_stream_process() {
         std::vector<wchar_t> cmd_buf(cmd.begin(), cmd.end());
         cmd_buf.push_back(L'\0');
 
-        wchar_t old_path[32767] = {};
-        GetEnvironmentVariableW(L"PATH", old_path, 32767);
-        if (!bin_dir.empty()) {
-            std::wstring new_path = bin_dir + L";" + std::wstring(old_path);
-            SetEnvironmentVariableW(L"PATH", new_path.c_str());
+        prepare_gst_env(bin_dir);
+        if (!bin_dir.empty() && GetFileAttributesW(gst_bin.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            std::lock_guard<std::mutex> lk(g_mu);
+            g_state.is_streaming = false;
+            g_state.status_text = "Screen share could not start";
+            g_state.error_msg = "Streaming runtime is missing from the app folder.";
+            if (g_hwnd) InvalidateRect(g_hwnd, nullptr, FALSE);
+            return;
         }
 
         std::wstring log_path = get_app_dir() + L"\\stream_log.txt";
@@ -250,7 +287,8 @@ static void start_stream_process() {
         if (!ok) {
             std::lock_guard<std::mutex> lk(g_mu);
             g_state.is_streaming = false;
-            g_state.error_msg = "Failed to launch gst-launch-1.0.exe";
+            g_state.status_text = "Screen share could not start";
+            g_state.error_msg = "Could not start the bundled screen capture.";
             if (g_hwnd) InvalidateRect(g_hwnd, nullptr, FALSE);
             return;
         }
@@ -271,12 +309,16 @@ static void start_stream_process() {
         WaitForSingleObject(pi.hProcess, INFINITE);
         CloseHandle(pi.hProcess);
 
+        std::string tail = read_log_tail(log_path);
         {
             std::lock_guard<std::mutex> lk(g_mu);
             g_stream_proc = nullptr;
+            bool unexpected = g_state.status_text.find("LIVE") != std::string::npos
+                || g_state.status_text.find("Connecting") != std::string::npos;
             g_state.is_streaming = false;
-            if (g_state.status_text.find("LIVE") != std::string::npos) {
+            if (unexpected) {
                 g_state.status_text = "Stream ended";
+                if (!tail.empty()) g_state.error_msg = tail;
             }
         }
         if (g_hwnd) InvalidateRect(g_hwnd, nullptr, FALSE);
@@ -574,6 +616,9 @@ static void render() {
                    g_cfg.exclude_discord ? L"\u2022 Discord Excluded" : L"");
         D2D1_RECT_F rTimeTxt = D2D1::RectF(36, 572, WINDOW_WIDTH - 36, 598);
         d2d_draw(g_rt, time_buf, g_tf_small, rTimeTxt, bMuted);
+    } else if (!g_state.error_msg.empty()) {
+        D2D1_RECT_F rSubTxt = D2D1::RectF(36, 568, WINDOW_WIDTH - 36, 604);
+        d2d_draw(g_rt, to_wide(g_state.error_msg), g_tf_small, rSubTxt, bRed);
     } else {
         D2D1_RECT_F rSubTxt = D2D1::RectF(36, 572, WINDOW_WIDTH - 36, 598);
         d2d_draw(g_rt, L"Press Start Sharing to stream instantly to friends via low-latency WebRTC.", g_tf_small, rSubTxt, bMuted);
