@@ -12,6 +12,15 @@ host-app/main.obj
 stream_log.txt
 dist/GhostShareJor/stream_log.txt
 
+# Bundled GStreamer runtime (downloaded next to the exe, not source)
+dist/GhostShareJor/gst/
+dist/GhostShareJor/bin/
+dist/GhostShareJor/lib/
+dist/GhostShareJor/libexec/
+dist/GhostShareJor/etc/
+dist/GhostShareJor/share/
+gst-registry.bin
+
 # Editor / IDE
 .vscode/
 .vs/
