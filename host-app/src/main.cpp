@@ -10,31 +10,31 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
-#include <chrono>
 #include <algorithm>
+#include <cstdio>
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
 #include "ghost_share_core.h"
+#include "theme.h"
 
-static const int WINDOW_WIDTH = 560;
-static const int WINDOW_HEIGHT = 656;
+static const int WINDOW_WIDTH = 720;
+static const int WINDOW_HEIGHT = 440;
 
-// State
+// Direct2D / DirectWrite resources
 static HWND g_hwnd = nullptr;
 static ID2D1Factory* g_d2d = nullptr;
 static ID2D1HwndRenderTarget* g_rt = nullptr;
 static IDWriteFactory* g_dw = nullptr;
-static IDWriteTextFormat* g_tf_title = nullptr;
-static IDWriteTextFormat* g_tf_title_center = nullptr;
-static IDWriteTextFormat* g_tf_bold = nullptr;
-static IDWriteTextFormat* g_tf_regular = nullptr;
-static IDWriteTextFormat* g_tf_small = nullptr;
+static LumenTheme::FontSet g_fonts;
+
+static IDWriteTextFormat* g_tf_brand = nullptr;
+static IDWriteTextFormat* g_tf_body = nullptr;
+static IDWriteTextFormat* g_tf_body_center = nullptr;
 static IDWriteTextFormat* g_tf_mono = nullptr;
-static IDWriteTextFormat* g_tf_btn_center = nullptr;
-static IDWriteTextFormat* g_tf_ctrl_center = nullptr;
-static IDWriteTextFormat* g_tf_section_lbl = nullptr;
-static IDWriteTextFormat* g_tf_badge_center = nullptr;
+static IDWriteTextFormat* g_tf_mono_sm = nullptr;
+static IDWriteTextFormat* g_tf_mono_center = nullptr;
+static IDWriteTextFormat* g_tf_btn = nullptr;
 
 static inline void d2d_draw(ID2D1RenderTarget* rt, const std::wstring& text, IDWriteTextFormat* fmt, const D2D1_RECT_F& rc, ID2D1Brush* brush) {
     if (rt && fmt && brush && !text.empty()) {
@@ -57,8 +57,6 @@ static HANDLE g_job = nullptr;
 static bool g_copied_feedback = false;
 static uint32_t g_copied_tick = 0;
 
-static const int POPULAR_BITRATES[5] = { 8, 12, 16, 25, 40 };
-
 enum class HoverTarget {
     None = 0,
     Close,
@@ -66,9 +64,7 @@ enum class HoverTarget {
     Server,
     Res0, Res1, Res2, Res3,
     Fps0, Fps1,
-    Bit0, Bit1, Bit2, Bit3, Bit4,
-    BitMinus,
-    BitPlus,
+    BitrateSlider,
     Audio,
     Discord,
     Copy,
@@ -78,35 +74,26 @@ enum class HoverTarget {
 };
 
 static HoverTarget g_hover = HoverTarget::None;
+static HoverTarget g_focus = HoverTarget::None;
 static bool g_tracking_mouse = false;
+static bool g_dragging_bitrate = false;
+static int g_drag_start_bitrate = 16;
 
-// Interaction rects
 struct UiRects {
     D2D1_RECT_F btnClose;
     D2D1_RECT_F btnMinimize;
     D2D1_RECT_F boxServer;
 
-    // Resolution chips (0: Source, 1: 1440p, 2: 1080p, 3: 720p)
     D2D1_RECT_F chipRes[4];
-
-    // Framerate chips (0: 60 FPS, 1: 30 FPS)
     D2D1_RECT_F chipFps[2];
+    D2D1_RECT_F bitrateTrack;
 
-    // Bitrate chips (8M, 12M, 16M, 25M, 40M) & steppers
-    D2D1_RECT_F chipBitrate[5];
-    D2D1_RECT_F btnBitrateMinus;
-    D2D1_RECT_F btnBitratePlus;
-
-    // Audio & Discord Isolation cards
     D2D1_RECT_F btnAudio;
     D2D1_RECT_F btnDiscord;
 
-    // Link card buttons
     D2D1_RECT_F btnCopy;
     D2D1_RECT_F btnNewRoom;
     D2D1_RECT_F btnOpenWeb;
-
-    // Big Action Button
     D2D1_RECT_F btnStartStop;
 } g_rects;
 
@@ -123,6 +110,11 @@ static std::string to_utf8(const std::wstring& ws) {
     int sz = WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), -1, nullptr, 0, nullptr, nullptr);
     std::string s(sz - 1, 0);
     WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), -1, &s[0], sz, nullptr, nullptr);
+    return s;
+}
+
+static std::wstring to_upper_w(std::wstring s) {
+    for (wchar_t& ch : s) ch = towupper(ch);
     return s;
 }
 
@@ -239,7 +231,7 @@ static void stop_stream_process() {
         p = g_stream_proc;
         g_stream_proc = nullptr;
         g_state.is_streaming = false;
-        g_state.status_text = "Stream stopped";
+        g_state.status_text = "STANDBY";
     }
     if (p) {
         TerminateProcess(p, 0);
@@ -258,7 +250,7 @@ static void start_stream_process() {
         cfg_copy = g_cfg;
         g_state.is_streaming = true;
         g_state.start_time = GetTickCount();
-        g_state.status_text = "Connecting to server...";
+        g_state.status_text = "CONNECTING";
         g_state.error_msg.clear();
     }
 
@@ -275,8 +267,8 @@ static void start_stream_process() {
         if (!bin_dir.empty() && GetFileAttributesW(gst_bin.c_str()) == INVALID_FILE_ATTRIBUTES) {
             std::lock_guard<std::mutex> lk(g_mu);
             g_state.is_streaming = false;
-            g_state.status_text = "Screen share could not start";
-            g_state.error_msg = "Streaming runtime is missing from the app folder.";
+            g_state.status_text = "ERROR";
+            g_state.error_msg = "streaming runtime is missing from the app folder.";
             if (g_hwnd) InvalidateRect(g_hwnd, nullptr, FALSE);
             return;
         }
@@ -308,8 +300,8 @@ static void start_stream_process() {
         if (!ok) {
             std::lock_guard<std::mutex> lk(g_mu);
             g_state.is_streaming = false;
-            g_state.status_text = "Screen share could not start";
-            g_state.error_msg = "Could not start the bundled screen capture.";
+            g_state.status_text = "ERROR";
+            g_state.error_msg = "could not start bundled screen capture.";
             if (g_hwnd) InvalidateRect(g_hwnd, nullptr, FALSE);
             return;
         }
@@ -322,7 +314,7 @@ static void start_stream_process() {
         {
             std::lock_guard<std::mutex> lk(g_mu);
             g_stream_proc = pi.hProcess;
-            g_state.status_text = "LIVE — Screen sharing active";
+            g_state.status_text = "LIVE";
         }
         if (g_hwnd) InvalidateRect(g_hwnd, nullptr, FALSE);
 
@@ -333,11 +325,10 @@ static void start_stream_process() {
         {
             std::lock_guard<std::mutex> lk(g_mu);
             g_stream_proc = nullptr;
-            bool unexpected = g_state.status_text.find("LIVE") != std::string::npos
-                || g_state.status_text.find("Connecting") != std::string::npos;
+            bool unexpected = (g_state.status_text == "LIVE" || g_state.status_text == "CONNECTING");
             g_state.is_streaming = false;
             if (unexpected) {
-                g_state.status_text = "Stream ended";
+                g_state.status_text = "ENDED";
                 if (!tail.empty()) g_state.error_msg = tail;
             }
         }
@@ -345,392 +336,322 @@ static void start_stream_process() {
     }).detach();
 }
 
-static void draw_ghost_emblem(ID2D1RenderTarget* rt, float cx, float cy, float r, ID2D1Brush* brush, ID2D1Brush* eyeBrush) {
-    D2D1_ELLIPSE head = D2D1::Ellipse(D2D1::Point2F(cx, cy - r * 0.2f), r, r * 0.85f);
-    rt->FillEllipse(head, brush);
-    D2D1_RECT_F body = D2D1::RectF(cx - r, cy - r * 0.2f, cx + r, cy + r * 0.8f);
-    rt->FillRectangle(body, brush);
+static bool hit_test(const D2D1_RECT_F& rc, float x, float y) {
+    return x >= rc.left && x <= rc.right && y >= rc.top && y <= rc.bottom;
+}
 
-    float foot_w = (r * 2.0f) / 3.0f;
-    for (int i = 0; i < 3; ++i) {
-        float fx = (cx - r) + i * foot_w + foot_w * 0.5f;
-        D2D1_ELLIPSE foot = D2D1::Ellipse(D2D1::Point2F(fx, cy + r * 0.8f), foot_w * 0.5f, r * 0.35f);
-        rt->FillEllipse(foot, brush);
-    }
-    float eye_r = r * 0.17f;
-    D2D1_ELLIPSE eyeL = D2D1::Ellipse(D2D1::Point2F(cx - r * 0.35f, cy - r * 0.2f), eye_r, eye_r * 1.3f);
-    D2D1_ELLIPSE eyeR = D2D1::Ellipse(D2D1::Point2F(cx + r * 0.35f, cy - r * 0.2f), eye_r, eye_r * 1.3f);
-    rt->FillEllipse(eyeL, eyeBrush);
-    rt->FillEllipse(eyeR, eyeBrush);
+static int bitrate_from_x(float x) {
+    float t = (x - g_rects.bitrateTrack.left) / (std::max)(1.0f, g_rects.bitrateTrack.right - g_rects.bitrateTrack.left);
+    t = std::clamp(t, 0.0f, 1.0f);
+    int raw = 2 + static_cast<int>(t * 58.0f + 0.5f);
+    int snapped = ((raw + 1) / 2) * 2;
+    return std::clamp(snapped, 2, 60);
+}
+
+static void draw_focus_rect(ID2D1RenderTarget* rt, const D2D1_RECT_F& rc, ID2D1Brush* bFocus) {
+    D2D1_RECT_F out = D2D1::RectF(rc.left - 2.0f, rc.top - 2.0f, rc.right + 2.0f, rc.bottom + 2.0f);
+    rt->DrawRectangle(out, bFocus, 1.0f);
 }
 
 static void render() {
     if (!g_rt) return;
+
+    ShareConfig cfg;
+    ShareState st;
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        cfg = g_cfg;
+        st = g_state;
+    }
+
     g_rt->BeginDraw();
-    g_rt->Clear(D2D1::ColorF(0x050507)); // Deep Obsidian Studio Void
+    g_rt->Clear(LumenTheme::color(LumenTheme::PAPER));
 
-    ID2D1SolidColorBrush* bCard = nullptr;
-    ID2D1SolidColorBrush* bCardHover = nullptr;
-    ID2D1SolidColorBrush* bWell = nullptr;
-    ID2D1SolidColorBrush* bText = nullptr;
-    ID2D1SolidColorBrush* bSubText = nullptr;
+    ID2D1SolidColorBrush* bPaper2 = nullptr;
+    ID2D1SolidColorBrush* bPaper3 = nullptr;
+    ID2D1SolidColorBrush* bInk = nullptr;
+    ID2D1SolidColorBrush* bInk2 = nullptr;
     ID2D1SolidColorBrush* bMuted = nullptr;
+    ID2D1SolidColorBrush* bRule = nullptr;
+    ID2D1SolidColorBrush* bRule2 = nullptr;
+    ID2D1SolidColorBrush* bBlueprint = nullptr;
     ID2D1SolidColorBrush* bAccent = nullptr;
-    ID2D1SolidColorBrush* bAccentHover = nullptr;
-    ID2D1SolidColorBrush* bAccentDim = nullptr;
-    ID2D1SolidColorBrush* bRed = nullptr;
-    ID2D1SolidColorBrush* bRedHover = nullptr;
-    ID2D1SolidColorBrush* bGreen = nullptr;
-    ID2D1SolidColorBrush* bBorder = nullptr;
-    ID2D1SolidColorBrush* bBorderHover = nullptr;
-    ID2D1SolidColorBrush* bBg = nullptr;
+    ID2D1SolidColorBrush* bAccentEmit = nullptr;
+    ID2D1SolidColorBrush* bCoral = nullptr;
 
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x0e0e13), &bCard);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x171720), &bCardHover);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x09090d), &bWell);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0xfbfbfb), &bText);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0xa1a1aa), &bSubText);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x71717a), &bMuted);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x6366f1), &bAccent);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x7578ff), &bAccentHover);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x6366f1, 0.14f), &bAccentDim);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0xef4444), &bRed);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0xf87171), &bRedHover);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x10b981), &bGreen);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x20202a), &bBorder);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x3a3a4c), &bBorderHover);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(0x050507), &bBg);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::PAPER_2), &bPaper2);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::PAPER_3), &bPaper3);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::INK), &bInk);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::INK_2), &bInk2);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::MUTED), &bMuted);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::INK, LumenTheme::RULE_ALPHA), &bRule);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::INK, LumenTheme::RULE_2_ALPHA), &bRule2);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::INK, LumenTheme::BLUEPRINT_ALPHA), &bBlueprint);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::ACCENT), &bAccent);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::ACCENT, LumenTheme::PAPER_EMIT_ALPHA), &bAccentEmit);
+    g_rt->CreateSolidColorBrush(LumenTheme::color(LumenTheme::ACCENT_2), &bCoral);
 
-    // Outer 1px Studio Frame Border
-    g_rt->DrawRectangle(D2D1::RectF(0.5f, 0.5f, WINDOW_WIDTH - 0.5f, WINDOW_HEIGHT - 0.5f), bBorder, 1.0f);
+    // Outer 1px frame
+    g_rt->DrawRectangle(D2D1::RectF(0.5f, 0.5f, WINDOW_WIDTH - 0.5f, WINDOW_HEIGHT - 0.5f), bRule2, 1.0f);
 
-    // Header & Emblem
-    draw_ghost_emblem(g_rt, 36.0f, 32.0f, 14.0f, bAccent, bBg);
+    // --- TOP RACK BAR (y: 0..46) ---
+    g_rt->FillRectangle(D2D1::RectF(1.0f, 1.0f, WINDOW_WIDTH - 1.0f, 46.0f), bPaper2);
+    g_rt->DrawLine(D2D1::Point2F(0.0f, 46.5f), D2D1::Point2F((float)WINDOW_WIDTH, 46.5f), bRule, 1.0f);
 
-    D2D1_RECT_F rTitle = D2D1::RectF(60, 14, 340, 36);
-    d2d_draw(g_rt, L"GHOST SHARE JOR", g_tf_title, rTitle, bText);
+    // Brand lowercase + status emitter
+    d2d_draw(g_rt, L"ghost share jor", g_tf_brand, D2D1::RectF(20.0f, 12.0f, 165.0f, 34.0f), bInk);
+    g_rt->DrawLine(D2D1::Point2F(168.5f, 14.0f), D2D1::Point2F(168.5f, 32.0f), bRule, 1.0f);
 
-    D2D1_RECT_F rSub = D2D1::RectF(60, 36, 360, 52);
-    d2d_draw(g_rt, L"STUDIO HUD \u2022 ZERO-COPY WEBRTC", g_tf_small, rSub, bMuted);
+    bool isLive = (st.is_streaming && st.status_text == "LIVE");
+    bool isError = (!st.error_msg.empty());
+    ID2D1Brush* emitterBrush = isLive ? bAccent : (isError ? bCoral : bMuted);
+    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(184.0f, 23.0f), 3.0f, 3.0f), emitterBrush);
 
-    // Top-right Live / Standby Pill
-    D2D1_RECT_F rStatusPill = D2D1::RectF(WINDOW_WIDTH - 166, 16, WINDOW_WIDTH - 78, 36);
-    D2D1_ROUNDED_RECT rcPill = D2D1::RoundedRect(rStatusPill, 10, 10);
-    g_rt->FillRoundedRectangle(rcPill, g_state.is_streaming ? bAccentDim : bCard);
-    g_rt->DrawRoundedRectangle(rcPill, g_state.is_streaming ? bGreen : bBorder, 1.0f);
-    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(rStatusPill.left + 14.0f, 26.0f), 3.5f, 3.5f),
-                      g_state.is_streaming ? bGreen : bMuted);
-    D2D1_RECT_F rPillTxt = D2D1::RectF(rStatusPill.left + 16, 16, rStatusPill.right - 4, 36);
-    d2d_draw(g_rt, g_state.is_streaming ? L"LIVE" : L"STANDBY", g_tf_badge_center, rPillTxt,
-             g_state.is_streaming ? bGreen : bMuted);
-
-    // Window controls (Min / Close)
-    g_rects.btnMinimize = D2D1::RectF(WINDOW_WIDTH - 66, 14, WINDOW_WIDTH - 40, 38);
-    g_rects.btnClose = D2D1::RectF(WINDOW_WIDTH - 36, 14, WINDOW_WIDTH - 10, 38);
-    if (g_hover == HoverTarget::Minimize) {
-        g_rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnMinimize, 6, 6), bCardHover);
+    std::wstring statusStr = to_upper_w(to_wide(st.status_text.empty() ? "STANDBY" : st.status_text));
+    if (st.is_streaming) {
+        uint32_t sec = (GetTickCount() - st.start_time) / 1000;
+        wchar_t tbuf[32];
+        swprintf_s(tbuf, L" · %02u:%02u", sec / 60, sec % 60);
+        statusStr += tbuf;
     }
-    if (g_hover == HoverTarget::Close) {
-        g_rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnClose, 6, 6), bRed);
-    }
-    d2d_draw(g_rt, L"\u2014", g_tf_ctrl_center, g_rects.btnMinimize, g_hover == HoverTarget::Minimize ? bText : bMuted);
-    d2d_draw(g_rt, L"\u2715", g_tf_ctrl_center, g_rects.btnClose, g_hover == HoverTarget::Close ? bText : bMuted);
+    d2d_draw(g_rt, statusStr, g_tf_mono_sm, D2D1::RectF(196.0f, 16.0f, 360.0f, 34.0f), isLive ? bAccent : bMuted);
 
-    // Server URL Card
-    D2D1_ROUNDED_RECT rcServer = D2D1::RoundedRect(D2D1::RectF(24, 62, WINDOW_WIDTH - 24, 112), 8, 8);
-    g_rects.boxServer = rcServer.rect;
+    // Server chip
+    g_rects.boxServer = D2D1::RectF(368.0f, 10.0f, 628.0f, 36.0f);
     bool srvHover = (g_hover == HoverTarget::Server);
-    g_rt->FillRoundedRectangle(rcServer, srvHover ? bCardHover : bCard);
-    g_rt->DrawRoundedRectangle(rcServer, srvHover ? bBorderHover : bBorder, 1.0f);
+    g_rt->FillRectangle(g_rects.boxServer, srvHover ? bPaper3 : bPaper2);
+    g_rt->DrawRectangle(g_rects.boxServer, srvHover ? bRule2 : bRule, 1.0f);
+    std::string shortSrv = cfg.server_url;
+    if (shortSrv.size() > 28) shortSrv = shortSrv.substr(0, 26) + "..";
+    std::wstring srvLbl = L"SRV · " + to_upper_w(to_wide(shortSrv));
+    d2d_draw(g_rt, srvLbl, g_tf_mono_sm, D2D1::RectF(378.0f, 16.0f, 620.0f, 32.0f), srvHover ? bInk : bInk2);
+    if (g_focus == HoverTarget::Server) draw_focus_rect(g_rt, g_rects.boxServer, bAccent);
 
-    D2D1_RECT_F rSrvLbl = D2D1::RectF(36, 69, 380, 84);
-    d2d_draw(g_rt, L"SERVER ENDPOINT (CLICK TO EDIT)", g_tf_section_lbl, rSrvLbl, bMuted);
-    D2D1_RECT_F rSrvVal = D2D1::RectF(36, 85, WINDOW_WIDTH - 36, 106);
-    std::wstring wsServer = to_wide(g_cfg.server_url);
-    d2d_draw(g_rt, wsServer, g_tf_mono, rSrvVal, bText);
+    // Window controls
+    g_rects.btnMinimize = D2D1::RectF(638.0f, 10.0f, 666.0f, 36.0f);
+    g_rects.btnClose    = D2D1::RectF(672.0f, 10.0f, 700.0f, 36.0f);
+    if (g_hover == HoverTarget::Minimize) g_rt->FillRectangle(g_rects.btnMinimize, bPaper3);
+    if (g_hover == HoverTarget::Close)    g_rt->FillRectangle(g_rects.btnClose, bCoral);
+    d2d_draw(g_rt, L"—", g_tf_mono_center, g_rects.btnMinimize, bInk2);
+    d2d_draw(g_rt, L"✕", g_tf_mono_center, g_rects.btnClose, (g_hover == HoverTarget::Close) ? bInk : bInk2);
 
-    // -------------------------------------------------------------
-    // SECTION 1: RESOLUTION (Unified Segmented Bar)
-    // -------------------------------------------------------------
-    D2D1_RECT_F rResLbl = D2D1::RectF(24, 123, WINDOW_WIDTH - 24, 138);
-    d2d_draw(g_rt, L"RESOLUTION", g_tf_section_lbl, rResLbl, bMuted);
+    // --- LEFT PANE: SIGNAL CHAIN APPARATUS (x: 20..268, y: 60..328) ---
+    D2D1_RECT_F appBox = D2D1::RectF(20.0f, 60.0f, 268.0f, 328.0f);
+    g_rt->FillRectangle(appBox, bPaper2);
+    g_rt->DrawRectangle(appBox, bRule, 1.0f);
 
-    float total_usable_w = (float)(WINDOW_WIDTH - 48); // 512
-    D2D1_ROUNDED_RECT rcResWell = D2D1::RoundedRect(D2D1::RectF(24, 140, WINDOW_WIDTH - 24, 178), 8, 8);
-    g_rt->FillRoundedRectangle(rcResWell, bWell);
-    g_rt->DrawRoundedRectangle(rcResWell, bBorder, 1.0f);
+    // Subtle blueprint grid inside schematic box
+    g_rt->PushAxisAlignedClip(appBox, D2D1_ANTIALIAS_MODE_ALIASED);
+    for (float gx = appBox.left + 24.0f; gx < appBox.right; gx += 24.0f) {
+        g_rt->DrawLine(D2D1::Point2F(gx, appBox.top), D2D1::Point2F(gx, appBox.bottom), bBlueprint, 1.0f);
+    }
+    for (float gy = appBox.top + 24.0f; gy < appBox.bottom; gy += 24.0f) {
+        g_rt->DrawLine(D2D1::Point2F(appBox.left, gy), D2D1::Point2F(appBox.right, gy), bBlueprint, 1.0f);
+    }
+    g_rt->PopAxisAlignedClip();
 
-    const wchar_t* res_names[4] = { L"Source", L"1440p QHD", L"1080p FHD", L"720p HD" };
-    float seg_pad = 4.0f;
-    float chip_w = (total_usable_w - (seg_pad * 5.0f)) / 4.0f;
-    float chip_y = 144.0f;
-    float chip_h = 30.0f;
+    d2d_draw(g_rt, L"SIGNAL CHAIN", g_tf_mono_sm, D2D1::RectF(34.0f, 72.0f, 200.0f, 88.0f), bMuted);
+
+    // 4 schematic nodes vertically connected
+    const wchar_t* nodeNames[4] = { L"CAPTURE", L"ENCODE", L"AUDIO", L"ROOM" };
+    std::wstring resVal = to_upper_w(resolution_title(cfg.resolution));
+    wchar_t fpsBuf[16];
+    swprintf_s(fpsBuf, L"%d FPS", (int)cfg.fps);
+    std::wstring encVal = (cfg.use_nvenc ? L"NVENC · " : L"X264 · ") + std::to_wstring(cfg.bitrate_mbps) + L"M";
+    DWORD discordPid = cfg.exclude_discord ? find_discord_root_pid() : 0;
+    std::wstring audVal = !cfg.audio_enabled ? L"MUTED"
+        : (cfg.exclude_discord
+            ? (discordPid ? (L"EXCL PID " + std::to_wstring(discordPid)) : L"EXCL · NO DISC")
+            : L"SYS + DISCORD");
+    std::wstring roomVal = to_upper_w(to_wide(cfg.room_id));
+
+    std::wstring nodeVals[4] = {
+        resVal + L" · " + fpsBuf,
+        encVal,
+        audVal,
+        roomVal
+    };
 
     for (int i = 0; i < 4; ++i) {
-        float x1 = 24.0f + seg_pad + i * (chip_w + seg_pad);
-        float x2 = x1 + chip_w;
-        g_rects.chipRes[i] = D2D1::RectF(x1, chip_y, x2, chip_y + chip_h);
-        D2D1_ROUNDED_RECT rcChip = D2D1::RoundedRect(g_rects.chipRes[i], 6, 6);
+        float ny = 104.0f + i * 54.0f;
+        D2D1_RECT_F nRect = D2D1::RectF(34.0f, ny, 108.0f, ny + 30.0f);
+        bool activeNode = (i == 3 && isLive);
+        g_rt->FillRectangle(nRect, activeNode ? bAccentEmit : bPaper3);
+        g_rt->DrawRectangle(nRect, activeNode ? bAccent : bRule2, 1.0f);
+        d2d_draw(g_rt, nodeNames[i], g_tf_mono_center, nRect, activeNode ? bAccent : bInk2);
 
-        bool is_active = ((int)g_cfg.resolution == i);
-        bool is_hover = ((int)g_hover == (int)HoverTarget::Res0 + i);
+        // Leader line to live readout
+        g_rt->DrawLine(D2D1::Point2F(108.0f, ny + 15.0f), D2D1::Point2F(124.0f, ny + 15.0f), activeNode ? bAccent : bRule2, 1.0f);
+        d2d_draw(g_rt, nodeVals[i], g_tf_mono_sm, D2D1::RectF(130.0f, ny + 8.0f, 258.0f, ny + 26.0f), activeNode ? bAccent : bInk);
 
-        if (is_active) {
-            g_rt->FillRoundedRectangle(rcChip, is_hover ? bAccentHover : bAccent);
-            d2d_draw(g_rt, res_names[i], g_tf_btn_center, g_rects.chipRes[i], bText);
-        } else {
-            if (is_hover) g_rt->FillRoundedRectangle(rcChip, bCardHover);
-            d2d_draw(g_rt, res_names[i], g_tf_btn_center, g_rects.chipRes[i], is_hover ? bText : bSubText);
+        // Vertical bus connector to next node
+        if (i < 3) {
+            g_rt->DrawLine(D2D1::Point2F(71.0f, ny + 30.0f), D2D1::Point2F(71.0f, ny + 54.0f), isLive ? bAccent : bRule2, 1.0f);
         }
     }
 
-    // -------------------------------------------------------------
-    // SECTION 2: FRAMERATE & BITRATE CONTROLS
-    // -------------------------------------------------------------
-    D2D1_RECT_F rFpsBitLbl = D2D1::RectF(24, 190, 320, 205);
-    d2d_draw(g_rt, L"FRAMERATE & BITRATE", g_tf_section_lbl, rFpsBitLbl, bMuted);
+    // --- RIGHT PANE: CONTROLS (x: 284..700) ---
 
-    wchar_t rate_badge[64];
-    swprintf_s(rate_badge, L"%s \u2022 %d Mbps", fps_title(g_cfg.fps), g_cfg.bitrate_mbps);
-    D2D1_RECT_F rRateVal = D2D1::RectF(320, 189, WINDOW_WIDTH - 24, 205);
-    g_tf_section_lbl->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-    d2d_draw(g_rt, rate_badge, g_tf_section_lbl, rRateVal, bAccent);
-    g_tf_section_lbl->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    // 1. SOURCE RESOLUTION (y: 60..118)
+    d2d_draw(g_rt, L"SOURCE", g_tf_mono_sm, D2D1::RectF(284.0f, 62.0f, 380.0f, 78.0f), bMuted);
+    const wchar_t* resLabels[4] = { L"native", L"1440p", L"1080p", L"720p" };
+    float segW = (700.0f - 284.0f) / 4.0f;
+    for (int i = 0; i < 4; ++i) {
+        g_rects.chipRes[i] = D2D1::RectF(284.0f + i * segW, 82.0f, 284.0f + (i + 1) * segW, 114.0f);
+        bool sel = ((int)cfg.resolution == i);
+        bool hov = (g_hover == (HoverTarget)((int)HoverTarget::Res0 + i));
+        g_rt->FillRectangle(g_rects.chipRes[i], sel ? bAccentEmit : (hov ? bPaper3 : bPaper2));
+        g_rt->DrawRectangle(g_rects.chipRes[i], bRule, 1.0f);
+        if (sel) {
+            g_rt->DrawLine(
+                D2D1::Point2F(g_rects.chipRes[i].left, g_rects.chipRes[i].bottom - 1.0f),
+                D2D1::Point2F(g_rects.chipRes[i].right, g_rects.chipRes[i].bottom - 1.0f),
+                bAccent, 2.0f
+            );
+        }
+        d2d_draw(g_rt, resLabels[i], g_tf_body_center, g_rects.chipRes[i], sel ? bAccent : (hov ? bInk : bInk2));
+        if (g_focus == (HoverTarget)((int)HoverTarget::Res0 + i)) draw_focus_rect(g_rt, g_rects.chipRes[i], bAccent);
+    }
 
-    float row2_y = 207.0f;
-    float row2_h = 34.0f;
+    // 2. RATE & BITRATE TICK SLIDER (y: 128..236)
+    d2d_draw(g_rt, L"FRAME RATE", g_tf_mono_sm, D2D1::RectF(284.0f, 130.0f, 390.0f, 146.0f), bMuted);
+    d2d_draw(g_rt, L"BITRATE · 2–60 MBPS", g_tf_mono_sm, D2D1::RectF(416.0f, 130.0f, 600.0f, 146.0f), bMuted);
+    std::wstring mbpsReadout = std::to_wstring(cfg.bitrate_mbps) + L" MBPS";
+    IDWriteTextFormat* oldAlign = g_tf_mono_sm;
+    d2d_draw(g_rt, mbpsReadout, g_tf_mono, D2D1::RectF(630.0f, 128.0f, 700.0f, 146.0f), bAccent);
+    (void)oldAlign;
 
-    // FPS Segmented Well (60 FPS | 30 FPS)
-    D2D1_ROUNDED_RECT rcFpsWell = D2D1::RoundedRect(D2D1::RectF(24, row2_y, 178, row2_y + row2_h), 8, 8);
-    g_rt->FillRoundedRectangle(rcFpsWell, bWell);
-    g_rt->DrawRoundedRectangle(rcFpsWell, bBorder, 1.0f);
-
-    const wchar_t* fps_names[2] = { L"60 FPS", L"30 FPS" };
-    float fps_w = 72.0f;
+    const wchar_t* fpsLabels[2] = { L"60 fps", L"30 fps" };
     for (int i = 0; i < 2; ++i) {
-        float x1 = 27.0f + i * (fps_w + 4.0f);
-        float x2 = x1 + fps_w;
-        g_rects.chipFps[i] = D2D1::RectF(x1, row2_y + 3.0f, x2, row2_y + row2_h - 3.0f);
-        D2D1_ROUNDED_RECT rcFps = D2D1::RoundedRect(g_rects.chipFps[i], 6, 6);
-
-        bool is_active = (i == 0 && g_cfg.fps == ScreenFps::Fps60) || (i == 1 && g_cfg.fps == ScreenFps::Fps30);
-        bool is_hover = ((int)g_hover == (int)HoverTarget::Fps0 + i);
-        if (is_active) {
-            g_rt->FillRoundedRectangle(rcFps, is_hover ? bAccentHover : bAccent);
-            d2d_draw(g_rt, fps_names[i], g_tf_btn_center, g_rects.chipFps[i], bText);
-        } else {
-            if (is_hover) g_rt->FillRoundedRectangle(rcFps, bCardHover);
-            d2d_draw(g_rt, fps_names[i], g_tf_btn_center, g_rects.chipFps[i], is_hover ? bText : bSubText);
+        g_rects.chipFps[i] = D2D1::RectF(284.0f + i * 60.0f, 152.0f, 284.0f + (i + 1) * 60.0f, 184.0f);
+        bool sel = (i == 0 && cfg.fps == ScreenFps::Fps60) || (i == 1 && cfg.fps == ScreenFps::Fps30);
+        bool hov = (g_hover == (i == 0 ? HoverTarget::Fps0 : HoverTarget::Fps1));
+        g_rt->FillRectangle(g_rects.chipFps[i], sel ? bAccentEmit : (hov ? bPaper3 : bPaper2));
+        g_rt->DrawRectangle(g_rects.chipFps[i], bRule, 1.0f);
+        if (sel) {
+            g_rt->DrawLine(
+                D2D1::Point2F(g_rects.chipFps[i].left, g_rects.chipFps[i].bottom - 1.0f),
+                D2D1::Point2F(g_rects.chipFps[i].right, g_rects.chipFps[i].bottom - 1.0f),
+                bAccent, 2.0f
+            );
         }
+        d2d_draw(g_rt, fpsLabels[i], g_tf_body_center, g_rects.chipFps[i], sel ? bAccent : (hov ? bInk : bInk2));
+        if (g_focus == (i == 0 ? HoverTarget::Fps0 : HoverTarget::Fps1)) draw_focus_rect(g_rt, g_rects.chipFps[i], bAccent);
     }
 
-    // Bitrate Popular Chips (8M, 12M, 16M, 25M, 40M)
-    float bit_start_x = 188.0f;
-    float bit_w = 46.0f;
-    for (int i = 0; i < 5; ++i) {
-        float x1 = bit_start_x + i * (bit_w + 5.0f);
-        float x2 = x1 + bit_w;
-        g_rects.chipBitrate[i] = D2D1::RectF(x1, row2_y, x2, row2_y + row2_h);
-        D2D1_ROUNDED_RECT rcBit = D2D1::RoundedRect(g_rects.chipBitrate[i], 7, 7);
+    // Tick Slider well (x: 416..700, y: 152..184)
+    g_rects.bitrateTrack = D2D1::RectF(416.0f, 152.0f, 700.0f, 184.0f);
+    bool sliderHov = (g_hover == HoverTarget::BitrateSlider || g_dragging_bitrate);
+    g_rt->FillRectangle(g_rects.bitrateTrack, bPaper2);
+    g_rt->DrawRectangle(g_rects.bitrateTrack, sliderHov ? bRule2 : bRule, 1.0f);
 
-        bool is_active = (g_cfg.bitrate_mbps == POPULAR_BITRATES[i]);
-        bool is_hover = ((int)g_hover == (int)HoverTarget::Bit0 + i);
-        wchar_t b_label[16];
-        swprintf_s(b_label, L"%dM", POPULAR_BITRATES[i]);
+    float trackPad = 12.0f;
+    float trackLeft = g_rects.bitrateTrack.left + trackPad;
+    float trackRight = g_rects.bitrateTrack.right - trackPad;
+    float trackSpan = trackRight - trackLeft;
+    float norm = (float)(cfg.bitrate_mbps - 2) / 58.0f;
+    float needleX = trackLeft + norm * trackSpan;
 
-        if (is_active) {
-            g_rt->FillRoundedRectangle(rcBit, is_hover ? bAccentHover : bAccent);
-            d2d_draw(g_rt, b_label, g_tf_btn_center, g_rects.chipBitrate[i], bText);
-        } else {
-            g_rt->FillRoundedRectangle(rcBit, is_hover ? bCardHover : bCard);
-            g_rt->DrawRoundedRectangle(rcBit, is_hover ? bBorderHover : bBorder, 1.0f);
-            d2d_draw(g_rt, b_label, g_tf_btn_center, g_rects.chipBitrate[i], is_hover ? bText : bSubText);
-        }
+    // 30 vertical ticks (every 2 Mbps)
+    for (int t = 0; t < 30; ++t) {
+        float tx = trackLeft + ((float)t / 29.0f) * trackSpan;
+        int tickVal = 2 + t * 2;
+        bool activeTick = (tickVal <= cfg.bitrate_mbps);
+        float tickH = (t % 5 == 0) ? 14.0f : 8.0f;
+        g_rt->DrawLine(
+            D2D1::Point2F(tx, 178.0f - tickH),
+            D2D1::Point2F(tx, 178.0f),
+            activeTick ? bAccent : bRule2,
+            1.0f
+        );
     }
+    // Needle marker
+    g_rt->FillRectangle(D2D1::RectF(needleX - 1.5f, 156.0f, needleX + 1.5f, 180.0f), bInk);
+    if (g_focus == HoverTarget::BitrateSlider) draw_focus_rect(g_rt, g_rects.bitrateTrack, bAccent);
 
-    // Steppers: [-] and [+]
-    g_rects.btnBitrateMinus = D2D1::RectF(448, row2_y, 489, row2_y + row2_h);
-    g_rects.btnBitratePlus = D2D1::RectF(495, row2_y, 536, row2_y + row2_h);
+    // 3. AUDIO & DISCORD ISOLATION (y: 202..276)
+    d2d_draw(g_rt, L"AUDIO ROUTING", g_tf_mono_sm, D2D1::RectF(284.0f, 202.0f, 440.0f, 218.0f), bMuted);
 
-    bool minusHover = (g_hover == HoverTarget::BitMinus);
-    bool plusHover = (g_hover == HoverTarget::BitPlus);
+    g_rects.btnAudio = D2D1::RectF(284.0f, 224.0f, 486.0f, 278.0f);
+    bool audHov = (g_hover == HoverTarget::Audio);
+    g_rt->FillRectangle(g_rects.btnAudio, cfg.audio_enabled ? bAccentEmit : (audHov ? bPaper3 : bPaper2));
+    g_rt->DrawRectangle(g_rects.btnAudio, cfg.audio_enabled ? bAccent : (audHov ? bRule2 : bRule), 1.0f);
+    d2d_draw(g_rt, L"system audio", g_tf_body, D2D1::RectF(296.0f, 234.0f, 440.0f, 254.0f), cfg.audio_enabled ? bInk : bInk2);
+    d2d_draw(g_rt, cfg.audio_enabled ? L"ON" : L"OFF", g_tf_mono_sm, D2D1::RectF(446.0f, 236.0f, 476.0f, 252.0f), cfg.audio_enabled ? bAccent : bMuted);
+    d2d_draw(g_rt, cfg.audio_enabled ? L"WASAPI LOOPBACK" : L"VIDEO ONLY", g_tf_mono_sm, D2D1::RectF(296.0f, 256.0f, 476.0f, 272.0f), bMuted);
+    if (g_focus == HoverTarget::Audio) draw_focus_rect(g_rt, g_rects.btnAudio, bAccent);
 
-    g_rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnBitrateMinus, 7, 7), minusHover ? bCardHover : bCard);
-    g_rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.btnBitrateMinus, 7, 7), minusHover ? bBorderHover : bBorder, 1.0f);
-    d2d_draw(g_rt, L"\u2212", g_tf_ctrl_center, g_rects.btnBitrateMinus, bText);
+    g_rects.btnDiscord = D2D1::RectF(498.0f, 224.0f, 700.0f, 278.0f);
+    bool discHov = (g_hover == HoverTarget::Discord);
+    bool discActive = (cfg.audio_enabled && cfg.exclude_discord);
+    g_rt->FillRectangle(g_rects.btnDiscord, discActive ? bAccentEmit : (discHov ? bPaper3 : bPaper2));
+    g_rt->DrawRectangle(g_rects.btnDiscord, discActive ? bAccent : (discHov ? bRule2 : bRule), 1.0f);
+    d2d_draw(g_rt, L"exclude discord", g_tf_body, D2D1::RectF(510.0f, 234.0f, 650.0f, 254.0f), discActive ? bInk : bInk2);
+    d2d_draw(g_rt, discActive ? L"ON" : L"OFF", g_tf_mono_sm, D2D1::RectF(660.0f, 236.0f, 690.0f, 252.0f), discActive ? bAccent : bMuted);
+    std::wstring discSub = !cfg.audio_enabled ? L"AUDIO DISABLED"
+        : (discordPid ? (L"PID " + std::to_wstring(discordPid) + L" ISOLATED") : (cfg.exclude_discord ? L"WAITING FOR DISCORD" : L"INCLUDED IN MIX"));
+    d2d_draw(g_rt, discSub, g_tf_mono_sm, D2D1::RectF(510.0f, 256.0f, 690.0f, 272.0f), bMuted);
+    if (g_focus == HoverTarget::Discord) draw_focus_rect(g_rt, g_rects.btnDiscord, bAccent);
 
-    g_rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnBitratePlus, 7, 7), plusHover ? bCardHover : bCard);
-    g_rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.btnBitratePlus, 7, 7), plusHover ? bBorderHover : bBorder, 1.0f);
-    d2d_draw(g_rt, L"+", g_tf_ctrl_center, g_rects.btnBitratePlus, bText);
+    // 4. VIEWER LINK STRIP (y: 292..328)
+    D2D1_RECT_F linkWell = D2D1::RectF(284.0f, 294.0f, 700.0f, 328.0f);
+    g_rt->FillRectangle(linkWell, bPaper2);
+    g_rt->DrawRectangle(linkWell, bRule, 1.0f);
 
-    // Current spec preview description
-    D2D1_RECT_F rSpecPrev = D2D1::RectF(24, 245, WINDOW_WIDTH - 24, 261);
-    wchar_t spec_desc[128];
-    swprintf_s(spec_desc, L"Profile: %s \u2022 Hardware NV12 GPU Pipeline (%d Mbps cap)",
-               resolution_title(g_cfg.resolution), g_cfg.bitrate_mbps);
-    d2d_draw(g_rt, spec_desc, g_tf_small, rSpecPrev, bMuted);
+    std::string viewUrl = cfg.server_url;
+    while (!viewUrl.empty() && viewUrl.back() == '/') viewUrl.pop_back();
+    viewUrl += "/r/" + cfg.room_id;
+    std::string dispUrl = viewUrl;
+    if (dispUrl.size() > 34) dispUrl = ".." + dispUrl.substr(dispUrl.size() - 32);
+    d2d_draw(g_rt, to_wide(dispUrl), g_tf_mono_sm, D2D1::RectF(296.0f, 304.0f, 520.0f, 322.0f), bInk2);
 
-    // -------------------------------------------------------------
-    // SECTION 3: AUDIO & DISCORD ISOLATION (Two Equal Cards)
-    // -------------------------------------------------------------
-    D2D1_RECT_F rAudioSectionLbl = D2D1::RectF(24, 272, WINDOW_WIDTH - 24, 287);
-    d2d_draw(g_rt, L"AUDIO ROUTING & DISCORD ISOLATION", g_tf_section_lbl, rAudioSectionLbl, bMuted);
+    g_rects.btnCopy    = D2D1::RectF(528.0f, 299.0f, 580.0f, 323.0f);
+    g_rects.btnNewRoom = D2D1::RectF(584.0f, 299.0f, 640.0f, 323.0f);
+    g_rects.btnOpenWeb = D2D1::RectF(644.0f, 299.0f, 694.0f, 323.0f);
 
-    float card_audio_w = (total_usable_w - 10.0f) / 2.0f; // 251 px
-    float card_audio_y = 289.0f;
-    float card_audio_h = 56.0f;
+    auto draw_mini_btn = [&](const D2D1_RECT_F& r, const wchar_t* lbl, HoverTarget t, bool accentText = false) {
+        bool h = (g_hover == t);
+        g_rt->FillRectangle(r, h ? bPaper3 : bPaper2);
+        g_rt->DrawRectangle(r, accentText ? bAccent : (h ? bRule2 : bRule), 1.0f);
+        d2d_draw(g_rt, lbl, g_tf_body_center, r, accentText ? bAccent : (h ? bInk : bInk2));
+        if (g_focus == t) draw_focus_rect(g_rt, r, bAccent);
+    };
+    draw_mini_btn(g_rects.btnCopy, g_copied_feedback ? L"copied" : L"copy", HoverTarget::Copy, g_copied_feedback);
+    draw_mini_btn(g_rects.btnNewRoom, L"new", HoverTarget::NewRoom);
+    draw_mini_btn(g_rects.btnOpenWeb, L"open", HoverTarget::OpenWeb);
 
-    // 1. System Audio Card
-    g_rects.btnAudio = D2D1::RectF(24, card_audio_y, 24 + card_audio_w, card_audio_y + card_audio_h);
-    D2D1_ROUNDED_RECT rcAudio = D2D1::RoundedRect(g_rects.btnAudio, 8, 8);
-    bool audHover = (g_hover == HoverTarget::Audio);
-    g_rt->FillRoundedRectangle(rcAudio, audHover ? bCardHover : bCard);
-    g_rt->DrawRoundedRectangle(rcAudio, g_cfg.audio_enabled ? bAccent : (audHover ? bBorderHover : bBorder), 1.0f);
+    // --- FOOTER RACK BAR (y: 344..422) ---
+    g_rt->DrawLine(D2D1::Point2F(20.0f, 344.5f), D2D1::Point2F(700.0f, 344.5f), bRule, 1.0f);
 
-    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(39.0f, card_audio_y + 18.0f), 4.0f, 4.0f),
-                      g_cfg.audio_enabled ? bGreen : bMuted);
-    D2D1_RECT_F rAudTitle = D2D1::RectF(50, card_audio_y + 9, 24 + card_audio_w - 10, card_audio_y + 27);
-    d2d_draw(g_rt, g_cfg.audio_enabled ? L"SYSTEM AUDIO: ON" : L"SYSTEM AUDIO: MUTED",
-             g_tf_bold, rAudTitle, g_cfg.audio_enabled ? bText : bMuted);
+    // Primary Action Button
+    g_rects.btnStartStop = D2D1::RectF(536.0f, 358.0f, 700.0f, 396.0f);
+    bool actHov = (g_hover == HoverTarget::StartStop);
+    ID2D1SolidColorBrush* actBorder = st.is_streaming ? bCoral : bAccent;
+    g_rt->FillRectangle(g_rects.btnStartStop, actHov ? bPaper3 : (st.is_streaming ? bPaper2 : bAccentEmit));
+    g_rt->DrawRectangle(g_rects.btnStartStop, actBorder, 1.0f);
+    d2d_draw(g_rt, st.is_streaming ? L"end broadcast" : L"go live", g_tf_btn, g_rects.btnStartStop, st.is_streaming ? bCoral : bAccent);
+    if (g_focus == HoverTarget::StartStop) draw_focus_rect(g_rt, g_rects.btnStartStop, bAccent);
 
-    D2D1_RECT_F rAudDesc = D2D1::RectF(35, card_audio_y + 30, 24 + card_audio_w - 10, card_audio_y + 48);
-    d2d_draw(g_rt, L"Captures game & desktop sound", g_tf_small, rAudDesc, bMuted);
-
-    // 2. Discord Isolation Card
-    DWORD discord_pid = find_discord_root_pid();
-    float disc_x = 24 + card_audio_w + 10.0f;
-    g_rects.btnDiscord = D2D1::RectF(disc_x, card_audio_y, WINDOW_WIDTH - 24, card_audio_y + card_audio_h);
-    D2D1_ROUNDED_RECT rcDiscord = D2D1::RoundedRect(g_rects.btnDiscord, 8, 8);
-    bool discHover = (g_hover == HoverTarget::Discord);
-    g_rt->FillRoundedRectangle(rcDiscord, discHover ? bCardHover : bCard);
-    g_rt->DrawRoundedRectangle(rcDiscord, g_cfg.exclude_discord ? bAccent : (discHover ? bBorderHover : bBorder), 1.0f);
-
-    ID2D1SolidColorBrush* discDotBrush = bMuted;
-    if (g_cfg.exclude_discord) {
-        discDotBrush = (discord_pid != 0) ? bGreen : bAccent;
-    }
-    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(disc_x + 15.0f, card_audio_y + 18.0f), 4.0f, 4.0f), discDotBrush);
-
-    D2D1_RECT_F rDiscTitle = D2D1::RectF(disc_x + 26.0f, card_audio_y + 9, WINDOW_WIDTH - 30, card_audio_y + 27);
-    d2d_draw(g_rt, g_cfg.exclude_discord ? L"EXCLUDE DISCORD: ON" : L"EXCLUDE DISCORD: OFF",
-             g_tf_bold, rDiscTitle, g_cfg.exclude_discord ? bText : bMuted);
-
-    D2D1_RECT_F rDiscDesc = D2D1::RectF(disc_x + 11.0f, card_audio_y + 30, WINDOW_WIDTH - 30, card_audio_y + 48);
-    if (g_cfg.exclude_discord) {
-        if (discord_pid != 0) {
-            d2d_draw(g_rt, L"Discord muted in stream (no echo)", g_tf_small, rDiscDesc, bGreen);
-        } else {
-            d2d_draw(g_rt, L"Waiting for Discord.exe...", g_tf_small, rDiscDesc, bMuted);
-        }
+    // Error / Keyboard hint line
+    if (!st.error_msg.empty()) {
+        d2d_draw(g_rt, to_wide(st.error_msg), g_tf_mono_sm, D2D1::RectF(20.0f, 366.0f, 520.0f, 412.0f), bCoral);
     } else {
-        d2d_draw(g_rt, L"All PC audio broadcasted", g_tf_small, rDiscDesc, bMuted);
+        d2d_draw(g_rt, L"SPACE: GO LIVE  ·  TAB: FOCUS  ·  1–4: RES  ·  CTRL+C: COPY LINK", g_tf_mono_sm, D2D1::RectF(20.0f, 370.0f, 520.0f, 390.0f), bMuted);
     }
-
-    // -------------------------------------------------------------
-    // SECTION 4: VIEWER LINK CARD
-    // -------------------------------------------------------------
-    D2D1_ROUNDED_RECT rcLink = D2D1::RoundedRect(D2D1::RectF(24, 357, WINDOW_WIDTH - 24, 441), 8, 8);
-    g_rt->FillRoundedRectangle(rcLink, bCard);
-    g_rt->DrawRoundedRectangle(rcLink, bBorder, 1.0f);
-
-    D2D1_RECT_F rLinkLbl = D2D1::RectF(36, 365, 480, 380);
-    d2d_draw(g_rt, L"VIEWER LINK (SHARE WITH FRIENDS)", g_tf_section_lbl, rLinkLbl, bMuted);
-
-    std::string view_url = g_cfg.server_url;
-    while (!view_url.empty() && view_url.back() == '/') view_url.pop_back();
-    view_url += "/r/" + g_cfg.room_id;
-    std::wstring wsViewUrl = to_wide(view_url);
-
-    D2D1_RECT_F rLinkVal = D2D1::RectF(36, 382, WINDOW_WIDTH - 36, 402);
-    d2d_draw(g_rt, wsViewUrl, g_tf_mono, rLinkVal, bAccent);
-
-    // 3 Buttons: COPY LINK, NEW ROOM, OPEN WEB
-    g_rects.btnCopy = D2D1::RectF(36, 406, 196, 432);
-    D2D1_ROUNDED_RECT rcCopy = D2D1::RoundedRect(g_rects.btnCopy, 6, 6);
-    bool copyHover = (g_hover == HoverTarget::Copy);
-    g_rt->FillRoundedRectangle(rcCopy, g_copied_feedback ? bGreen : (copyHover ? bAccentHover : bAccent));
-    d2d_draw(g_rt, g_copied_feedback ? L"COPIED TO CLIPBOARD" : L"COPY LINK", g_tf_btn_center, g_rects.btnCopy, bText);
-
-    g_rects.btnNewRoom = D2D1::RectF(204, 406, 344, 432);
-    D2D1_ROUNDED_RECT rcNewRoom = D2D1::RoundedRect(g_rects.btnNewRoom, 6, 6);
-    bool newRoomHover = (g_hover == HoverTarget::NewRoom);
-    g_rt->FillRoundedRectangle(rcNewRoom, newRoomHover ? bCardHover : bWell);
-    g_rt->DrawRoundedRectangle(rcNewRoom, newRoomHover ? bBorderHover : bBorder, 1.0f);
-    d2d_draw(g_rt, L"NEW ROOM", g_tf_btn_center, g_rects.btnNewRoom, bText);
-
-    g_rects.btnOpenWeb = D2D1::RectF(352, 406, 480, 432);
-    D2D1_ROUNDED_RECT rcOpenWeb = D2D1::RoundedRect(g_rects.btnOpenWeb, 6, 6);
-    bool openHover = (g_hover == HoverTarget::OpenWeb);
-    g_rt->FillRoundedRectangle(rcOpenWeb, openHover ? bCardHover : bWell);
-    g_rt->DrawRoundedRectangle(rcOpenWeb, openHover ? bBorderHover : bBorder, 1.0f);
-    d2d_draw(g_rt, L"OPEN WEB", g_tf_btn_center, g_rects.btnOpenWeb, bText);
-
-    // -------------------------------------------------------------
-    // SECTION 5: BIG ACTION BUTTON (START / STOP SHARING)
-    // -------------------------------------------------------------
-    g_rects.btnStartStop = D2D1::RectF(24, 453, WINDOW_WIDTH - 24, 525);
-    D2D1_ROUNDED_RECT rcAction = D2D1::RoundedRect(g_rects.btnStartStop, 10, 10);
-    bool actionHover = (g_hover == HoverTarget::StartStop);
-    if (g_state.is_streaming) {
-        g_rt->FillRoundedRectangle(rcAction, actionHover ? bRedHover : bRed);
-        d2d_draw(g_rt, L"\u25A0  STOP SHARING", g_tf_title_center, g_rects.btnStartStop, bText);
-    } else {
-        g_rt->FillRoundedRectangle(rcAction, actionHover ? bAccentHover : bAccent);
-        d2d_draw(g_rt, L"\u25CF  START SHARING", g_tf_title_center, g_rects.btnStartStop, bText);
-    }
-
-    // -------------------------------------------------------------
-    // SECTION 6: STATUS BANNER & METRICS
-    // -------------------------------------------------------------
-    D2D1_ROUNDED_RECT rcStatus = D2D1::RoundedRect(D2D1::RectF(24, 537, WINDOW_WIDTH - 24, 626), 8, 8);
-    g_rt->FillRoundedRectangle(rcStatus, bCard);
-    g_rt->DrawRoundedRectangle(rcStatus, bBorder, 1.0f);
-
-    std::wstring wsStatus = to_wide(g_state.status_text);
-    D2D1_RECT_F rStatTxt = D2D1::RectF(36, 549, WINDOW_WIDTH - 36, 571);
-    d2d_draw(g_rt, wsStatus, g_tf_bold, rStatTxt, g_state.is_streaming ? bGreen : bText);
-
-    if (g_state.is_streaming) {
-        uint32_t sec = (GetTickCount() - g_state.start_time) / 1000;
-        int m = sec / 60;
-        int s = sec % 60;
-        wchar_t time_buf[128];
-        swprintf_s(time_buf, L"Duration: %02d:%02d \u2022 %s @ %s \u2022 %d Mbps %s",
-                   m, s, resolution_title(g_cfg.resolution), fps_title(g_cfg.fps),
-                   g_cfg.bitrate_mbps,
-                   g_cfg.exclude_discord ? L"\u2022 Discord Excluded" : L"");
-        D2D1_RECT_F rTimeTxt = D2D1::RectF(36, 575, WINDOW_WIDTH - 36, 610);
-        d2d_draw(g_rt, time_buf, g_tf_small, rTimeTxt, bSubText);
-    } else if (!g_state.error_msg.empty()) {
-        D2D1_RECT_F rSubTxt = D2D1::RectF(36, 573, WINDOW_WIDTH - 36, 614);
-        d2d_draw(g_rt, to_wide(g_state.error_msg), g_tf_small, rSubTxt, bRed);
-    } else {
-        D2D1_RECT_F rSubTxt = D2D1::RectF(36, 575, WINDOW_WIDTH - 36, 610);
-        d2d_draw(g_rt, L"Ready to stream via low-latency WebRTC. Click Start Sharing to go live.", g_tf_small, rSubTxt, bMuted);
-    }
-
-    // Release brushes
-    if (bCard) bCard->Release();
-    if (bCardHover) bCardHover->Release();
-    if (bWell) bWell->Release();
-    if (bText) bText->Release();
-    if (bSubText) bSubText->Release();
-    if (bMuted) bMuted->Release();
-    if (bAccent) bAccent->Release();
-    if (bAccentHover) bAccentHover->Release();
-    if (bAccentDim) bAccentDim->Release();
-    if (bRed) bRed->Release();
-    if (bRedHover) bRedHover->Release();
-    if (bGreen) bGreen->Release();
-    if (bBorder) bBorder->Release();
-    if (bBorderHover) bBorderHover->Release();
-    if (bBg) bBg->Release();
 
     g_rt->EndDraw();
-}
 
-static bool hit_test(const D2D1_RECT_F& r, float x, float y) {
-    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    bPaper2->Release();
+    bPaper3->Release();
+    bInk->Release();
+    bInk2->Release();
+    bMuted->Release();
+    bRule->Release();
+    bRule2->Release();
+    bBlueprint->Release();
+    bAccent->Release();
+    bAccentEmit->Release();
+    bCoral->Release();
 }
 
 static HoverTarget compute_hover(float x, float y) {
@@ -742,11 +663,7 @@ static HoverTarget compute_hover(float x, float y) {
     }
     if (hit_test(g_rects.chipFps[0], x, y)) return HoverTarget::Fps0;
     if (hit_test(g_rects.chipFps[1], x, y)) return HoverTarget::Fps1;
-    for (int i = 0; i < 5; ++i) {
-        if (hit_test(g_rects.chipBitrate[i], x, y)) return (HoverTarget)((int)HoverTarget::Bit0 + i);
-    }
-    if (hit_test(g_rects.btnBitrateMinus, x, y)) return HoverTarget::BitMinus;
-    if (hit_test(g_rects.btnBitratePlus, x, y)) return HoverTarget::BitPlus;
+    if (hit_test(g_rects.bitrateTrack, x, y)) return HoverTarget::BitrateSlider;
     if (hit_test(g_rects.btnAudio, x, y)) return HoverTarget::Audio;
     if (hit_test(g_rects.btnDiscord, x, y)) return HoverTarget::Discord;
     if (hit_test(g_rects.btnCopy, x, y)) return HoverTarget::Copy;
@@ -756,30 +673,149 @@ static HoverTarget compute_hover(float x, float y) {
     return HoverTarget::None;
 }
 
+static void copy_room_link(HWND hwnd) {
+    std::string view_url = g_cfg.server_url;
+    while (!view_url.empty() && view_url.back() == '/') view_url.pop_back();
+    view_url += "/r/" + g_cfg.room_id;
+    copy_text_to_clipboard(hwnd, view_url);
+    g_copied_feedback = true;
+    g_copied_tick = GetTickCount();
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static void edit_server_dialog(HWND hwnd) {
+    std::string clip_text;
+    if (OpenClipboard(hwnd)) {
+        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+        if (hData) {
+            wchar_t* pText = (wchar_t*)GlobalLock(hData);
+            if (pText) {
+                clip_text = to_utf8(std::wstring(pText));
+                GlobalUnlock(hData);
+            }
+        }
+        CloseClipboard();
+    }
+    while (!clip_text.empty() && (clip_text.back() == '\r' || clip_text.back() == '\n' || clip_text.back() == ' ')) clip_text.pop_back();
+    while (!clip_text.empty() && clip_text.front() == ' ') clip_text.erase(clip_text.begin());
+
+    std::wstring cfg_path = get_app_dir() + L"\\server.txt";
+    if (clip_text.rfind("http://", 0) == 0 || clip_text.rfind("https://", 0) == 0) {
+        std::wstring msg = L"Set Server URL to:\n\n" + to_wide(clip_text) + L"\n\n(Click 'No' to open server.txt in Notepad)";
+        int res = MessageBoxW(hwnd, msg.c_str(), L"ghost share jor — server url", MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (res == IDYES) {
+            g_cfg.server_url = clip_text;
+            save_config();
+            if (g_state.is_streaming) start_stream_process();
+        } else if (res == IDNO) {
+            ShellExecuteW(nullptr, L"open", L"notepad.exe", cfg_path.c_str(), nullptr, SW_SHOW);
+        }
+    } else {
+        int res = MessageBoxW(hwnd, L"Click 'OK' to open server.txt in Notepad.\n\n(Tip: Copy an http/https URL first and click here to apply it directly.)", L"ghost share jor — server url", MB_OKCANCEL | MB_ICONINFORMATION);
+        if (res == IDOK) {
+            ShellExecuteW(nullptr, L"open", L"notepad.exe", cfg_path.c_str(), nullptr, SW_SHOW);
+        }
+    }
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static void activate_target(HWND hwnd, HoverTarget target) {
+    switch (target) {
+    case HoverTarget::Server:
+        edit_server_dialog(hwnd);
+        break;
+    case HoverTarget::Res0:
+    case HoverTarget::Res1:
+    case HoverTarget::Res2:
+    case HoverTarget::Res3: {
+        g_cfg.resolution = (ScreenResolution)((int)target - (int)HoverTarget::Res0);
+        if (g_state.is_streaming) start_stream_process();
+        break;
+    }
+    case HoverTarget::Fps0:
+        g_cfg.fps = ScreenFps::Fps60;
+        if (g_state.is_streaming) start_stream_process();
+        break;
+    case HoverTarget::Fps1:
+        g_cfg.fps = ScreenFps::Fps30;
+        if (g_state.is_streaming) start_stream_process();
+        break;
+    case HoverTarget::Audio:
+        g_cfg.audio_enabled = !g_cfg.audio_enabled;
+        if (g_state.is_streaming) start_stream_process();
+        break;
+    case HoverTarget::Discord:
+        g_cfg.exclude_discord = !g_cfg.exclude_discord;
+        if (g_state.is_streaming) start_stream_process();
+        break;
+    case HoverTarget::Copy:
+        copy_room_link(hwnd);
+        break;
+    case HoverTarget::NewRoom:
+        g_cfg.room_id = generate_random_room();
+        if (g_state.is_streaming) start_stream_process();
+        break;
+    case HoverTarget::OpenWeb: {
+        std::string view_url = g_cfg.server_url;
+        while (!view_url.empty() && view_url.back() == '/') view_url.pop_back();
+        view_url += "/r/" + g_cfg.room_id;
+        ShellExecuteW(nullptr, L"open", to_wide(view_url).c_str(), nullptr, nullptr, SW_SHOW);
+        break;
+    }
+    case HoverTarget::StartStop:
+        if (g_state.is_streaming) stop_stream_process();
+        else start_stream_process();
+        break;
+    default:
+        break;
+    }
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static const HoverTarget FOCUS_ORDER[] = {
+    HoverTarget::Res0, HoverTarget::Res1, HoverTarget::Res2, HoverTarget::Res3,
+    HoverTarget::Fps0, HoverTarget::Fps1, HoverTarget::BitrateSlider,
+    HoverTarget::Audio, HoverTarget::Discord,
+    HoverTarget::Copy, HoverTarget::NewRoom, HoverTarget::OpenWeb,
+    HoverTarget::StartStop, HoverTarget::Server
+};
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_NCHITTEST: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         ScreenToClient(hwnd, &pt);
-        if (pt.y < 56 && !hit_test(g_rects.btnClose, (float)pt.x, (float)pt.y) && !hit_test(g_rects.btnMinimize, (float)pt.x, (float)pt.y)) {
-            return HTCAPTION; // Allow dragging the borderless window
+        if (pt.y < 46 && !hit_test(g_rects.btnClose, (float)pt.x, (float)pt.y)
+            && !hit_test(g_rects.btnMinimize, (float)pt.x, (float)pt.y)
+            && !hit_test(g_rects.boxServer, (float)pt.x, (float)pt.y)) {
+            return HTCAPTION;
         }
         return HTCLIENT;
     }
     case WM_SETCURSOR: {
         if (LOWORD(lParam) == HTCLIENT) {
-            SetCursor(LoadCursor(nullptr, (g_hover != HoverTarget::None) ? IDC_HAND : IDC_ARROW));
+            SetCursor(LoadCursor(nullptr, (g_hover != HoverTarget::None || g_dragging_bitrate) ? IDC_HAND : IDC_ARROW));
             return TRUE;
         }
         break;
     }
     case WM_MOUSEMOVE: {
+        float x = (float)GET_X_LPARAM(lParam);
+        float y = (float)GET_Y_LPARAM(lParam);
+        if (g_dragging_bitrate) {
+            int nextBit = bitrate_from_x(x);
+            if (nextBit != g_cfg.bitrate_mbps) {
+                g_cfg.bitrate_mbps = nextBit;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        }
         if (!g_tracking_mouse) {
             TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
             TrackMouseEvent(&tme);
             g_tracking_mouse = true;
         }
-        HoverTarget next = compute_hover((float)GET_X_LPARAM(lParam), (float)GET_Y_LPARAM(lParam));
+        HoverTarget next = compute_hover(x, y);
         if (next != g_hover) {
             g_hover = next;
             InvalidateRect(hwnd, nullptr, FALSE);
@@ -797,6 +833,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_LBUTTONDOWN: {
         float x = (float)GET_X_LPARAM(lParam);
         float y = (float)GET_Y_LPARAM(lParam);
+        g_focus = HoverTarget::None;
 
         if (hit_test(g_rects.btnClose, x, y)) {
             DestroyWindow(hwnd);
@@ -806,152 +843,84 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             ShowWindow(hwnd, SW_MINIMIZE);
             return 0;
         }
-
-        // Action button (Start / Stop)
-        if (hit_test(g_rects.btnStartStop, x, y)) {
-            if (g_state.is_streaming) {
-                stop_stream_process();
-            } else {
+        if (hit_test(g_rects.bitrateTrack, x, y)) {
+            g_dragging_bitrate = true;
+            g_drag_start_bitrate = g_cfg.bitrate_mbps;
+            g_cfg.bitrate_mbps = bitrate_from_x(x);
+            SetCapture(hwnd);
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+        HoverTarget t = compute_hover(x, y);
+        if (t != HoverTarget::None) {
+            activate_target(hwnd, t);
+            return 0;
+        }
+        break;
+    }
+    case WM_LBUTTONUP: {
+        if (g_dragging_bitrate) {
+            g_dragging_bitrate = false;
+            ReleaseCapture();
+            if (g_state.is_streaming && g_cfg.bitrate_mbps != g_drag_start_bitrate) {
                 start_stream_process();
             }
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
-
-        // Resolution Chips
-        for (int i = 0; i < 4; ++i) {
-            if (hit_test(g_rects.chipRes[i], x, y)) {
-                g_cfg.resolution = (ScreenResolution)i;
-                if (g_state.is_streaming) start_stream_process();
-                InvalidateRect(hwnd, nullptr, FALSE);
-                return 0;
+        break;
+    }
+    case WM_MOUSEWHEEL: {
+        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        int step = (delta > 0) ? 2 : -2;
+        int nextBit = std::clamp(g_cfg.bitrate_mbps + step, 2, 60);
+        if (nextBit != g_cfg.bitrate_mbps) {
+            g_cfg.bitrate_mbps = nextBit;
+            if (g_state.is_streaming) start_stream_process();
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+    case WM_KEYDOWN: {
+        bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        if (ctrl && wParam == 'C') {
+            copy_room_link(hwnd);
+            return 0;
+        }
+        if (wParam == VK_SPACE) {
+            activate_target(hwnd, HoverTarget::StartStop);
+            return 0;
+        }
+        if (wParam == VK_RETURN && g_focus != HoverTarget::None) {
+            activate_target(hwnd, g_focus);
+            return 0;
+        }
+        if (wParam == VK_TAB) {
+            int n = (int)(sizeof(FOCUS_ORDER) / sizeof(FOCUS_ORDER[0]));
+            int idx = -1;
+            for (int i = 0; i < n; ++i) {
+                if (FOCUS_ORDER[i] == g_focus) { idx = i; break; }
             }
+            if (idx < 0) idx = shift ? n - 1 : 0;
+            else idx = (idx + (shift ? -1 : 1) + n) % n;
+            g_focus = FOCUS_ORDER[idx];
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
         }
-
-        // Framerate Chips
-        if (hit_test(g_rects.chipFps[0], x, y)) {
-            g_cfg.fps = ScreenFps::Fps60;
+        if (wParam == VK_LEFT || wParam == VK_RIGHT) {
+            int step = (wParam == VK_RIGHT) ? 2 : -2;
+            g_cfg.bitrate_mbps = std::clamp(g_cfg.bitrate_mbps + step, 2, 60);
             if (g_state.is_streaming) start_stream_process();
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
-        if (hit_test(g_rects.chipFps[1], x, y)) {
-            g_cfg.fps = ScreenFps::Fps30;
+        if (wParam >= '1' && wParam <= '4') {
+            g_cfg.resolution = (ScreenResolution)(wParam - '1');
             if (g_state.is_streaming) start_stream_process();
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
-
-        // Popular Bitrate Chips
-        for (int i = 0; i < 5; ++i) {
-            if (hit_test(g_rects.chipBitrate[i], x, y)) {
-                g_cfg.bitrate_mbps = POPULAR_BITRATES[i];
-                if (g_state.is_streaming) start_stream_process();
-                InvalidateRect(hwnd, nullptr, FALSE);
-                return 0;
-            }
-        }
-
-        // Bitrate Minus / Plus
-        if (hit_test(g_rects.btnBitrateMinus, x, y)) {
-            g_cfg.bitrate_mbps = (std::max)(2, g_cfg.bitrate_mbps - 2);
-            if (g_state.is_streaming) start_stream_process();
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-        if (hit_test(g_rects.btnBitratePlus, x, y)) {
-            g_cfg.bitrate_mbps = (std::min)(60, g_cfg.bitrate_mbps + 2);
-            if (g_state.is_streaming) start_stream_process();
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-
-        // System Audio toggle
-        if (hit_test(g_rects.btnAudio, x, y)) {
-            g_cfg.audio_enabled = !g_cfg.audio_enabled;
-            if (g_state.is_streaming) start_stream_process();
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-
-        // Discord Isolation toggle
-        if (hit_test(g_rects.btnDiscord, x, y)) {
-            g_cfg.exclude_discord = !g_cfg.exclude_discord;
-            if (g_state.is_streaming) start_stream_process();
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-
-        // Copy link
-        if (hit_test(g_rects.btnCopy, x, y)) {
-            std::string view_url = g_cfg.server_url;
-            while (!view_url.empty() && view_url.back() == '/') view_url.pop_back();
-            view_url += "/r/" + g_cfg.room_id;
-            copy_text_to_clipboard(hwnd, view_url);
-            g_copied_feedback = true;
-            g_copied_tick = GetTickCount();
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-
-        // Regen room
-        if (hit_test(g_rects.btnNewRoom, x, y)) {
-            g_cfg.room_id = generate_random_room();
-            if (g_state.is_streaming) start_stream_process();
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-
-        // Open Web link in browser
-        if (hit_test(g_rects.btnOpenWeb, x, y)) {
-            std::string view_url = g_cfg.server_url;
-            while (!view_url.empty() && view_url.back() == '/') view_url.pop_back();
-            view_url += "/r/" + g_cfg.room_id;
-            ShellExecuteW(nullptr, L"open", to_wide(view_url).c_str(), nullptr, nullptr, SW_SHOW);
-            return 0;
-        }
-
-        // Edit server URL dialog
-        if (hit_test(g_rects.boxServer, x, y)) {
-            std::string clip_text;
-            if (OpenClipboard(hwnd)) {
-                HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-                if (hData) {
-                    wchar_t* pText = (wchar_t*)GlobalLock(hData);
-                    if (pText) {
-                        std::wstring ws(pText);
-                        clip_text = to_utf8(ws);
-                        GlobalUnlock(hData);
-                    }
-                }
-                CloseClipboard();
-            }
-
-            while (!clip_text.empty() && (clip_text.back() == '\r' || clip_text.back() == '\n' || clip_text.back() == ' ')) clip_text.pop_back();
-            while (!clip_text.empty() && clip_text.front() == ' ') clip_text.erase(clip_text.begin());
-
-            std::wstring cfg_path = get_app_dir() + L"\\server.txt";
-
-            if (clip_text.rfind("http://", 0) == 0 || clip_text.rfind("https://", 0) == 0) {
-                std::wstring msg = L"Do you want to set Server URL to:\n\n" + to_wide(clip_text) + L"\n\n(Click 'No' to open server.txt in Notepad)";
-                int res = MessageBoxW(hwnd, msg.c_str(), L"Ghost Share Jor — Server URL", MB_YESNOCANCEL | MB_ICONQUESTION);
-                if (res == IDYES) {
-                    g_cfg.server_url = clip_text;
-                    save_config();
-                    if (g_state.is_streaming) start_stream_process();
-                } else if (res == IDNO) {
-                    ShellExecuteW(nullptr, L"open", L"notepad.exe", cfg_path.c_str(), nullptr, SW_SHOW);
-                }
-            } else {
-                int res = MessageBoxW(hwnd, L"Click 'OK' to open server.txt in Notepad and enter your Server / Domain URL.\n\n(Tip: You can also copy an http/https URL and click here to paste it instantly!)", L"Ghost Share Jor — Server URL", MB_OKCANCEL | MB_ICONINFORMATION);
-                if (res == IDOK) {
-                    ShellExecuteW(nullptr, L"open", L"notepad.exe", cfg_path.c_str(), nullptr, SW_SHOW);
-                }
-            }
-            InvalidateRect(hwnd, nullptr, FALSE);
-            return 0;
-        }
-
         break;
     }
     case WM_TIMER: {
@@ -1002,30 +971,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2d);
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&g_dw);
+    g_fonts = LumenTheme::load_fonts(g_dw);
 
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.5f, L"en-US", &g_tf_title);
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 15.5f, L"en-US", &g_tf_title_center);
-    g_tf_title_center->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    g_tf_title_center->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    const wchar_t* bodyF = g_fonts.bodyFamily.c_str();
+    const wchar_t* monoF = g_fonts.monoFamily.c_str();
+    IDWriteFontCollection* col = g_fonts.collection;
 
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.5f, L"en-US", &g_tf_bold);
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.5f, L"en-US", &g_tf_regular);
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 11.0f, L"en-US", &g_tf_small);
-    g_dw->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.5f, L"en-US", &g_tf_mono);
+    g_dw->CreateTextFormat(bodyF, col, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.5f, L"en-US", &g_tf_brand);
+    g_dw->CreateTextFormat(bodyF, col, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.5f, L"en-US", &g_tf_body);
+    g_dw->CreateTextFormat(bodyF, col, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-US", &g_tf_body_center);
+    g_tf_body_center->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_tf_body_center->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 11.5f, L"en-US", &g_tf_btn_center);
-    g_tf_btn_center->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    g_tf_btn_center->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    g_dw->CreateTextFormat(monoF, col, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 11.5f, L"en-US", &g_tf_mono);
+    g_dw->CreateTextFormat(monoF, col, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_tf_mono_sm);
+    g_dw->CreateTextFormat(monoF, col, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_tf_mono_center);
+    g_tf_mono_center->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_tf_mono_center->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-US", &g_tf_ctrl_center);
-    g_tf_ctrl_center->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    g_tf_ctrl_center->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-
-    g_dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_tf_section_lbl);
-
-    g_dw->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_tf_badge_center);
-    g_tf_badge_center->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    g_tf_badge_center->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    g_dw->CreateTextFormat(bodyF, col, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"en-US", &g_tf_btn);
+    g_tf_btn->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_tf_btn->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = WndProc;
@@ -1043,7 +1009,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     g_hwnd = CreateWindowExW(
         WS_EX_APPWINDOW,
         wc.lpszClassName,
-        L"GHOST SHARE JOR",
+        L"ghost share jor",
         WS_POPUP | WS_VISIBLE,
         wx, wy, WINDOW_WIDTH, WINDOW_HEIGHT,
         nullptr, nullptr, hInstance, nullptr
@@ -1063,16 +1029,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
         DispatchMessageW(&msg);
     }
 
-    if (g_tf_title) g_tf_title->Release();
-    if (g_tf_title_center) g_tf_title_center->Release();
-    if (g_tf_bold) g_tf_bold->Release();
-    if (g_tf_regular) g_tf_regular->Release();
-    if (g_tf_small) g_tf_small->Release();
+    if (g_tf_brand) g_tf_brand->Release();
+    if (g_tf_body) g_tf_body->Release();
+    if (g_tf_body_center) g_tf_body_center->Release();
     if (g_tf_mono) g_tf_mono->Release();
-    if (g_tf_btn_center) g_tf_btn_center->Release();
-    if (g_tf_ctrl_center) g_tf_ctrl_center->Release();
-    if (g_tf_section_lbl) g_tf_section_lbl->Release();
-    if (g_tf_badge_center) g_tf_badge_center->Release();
+    if (g_tf_mono_sm) g_tf_mono_sm->Release();
+    if (g_tf_mono_center) g_tf_mono_center->Release();
+    if (g_tf_btn) g_tf_btn->Release();
+    g_fonts.release();
     if (g_rt) g_rt->Release();
     if (g_d2d) g_d2d->Release();
     if (g_dw) g_dw->Release();

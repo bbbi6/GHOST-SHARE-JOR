@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "date": "2026-11-14",
+      "surface": "server/www/index.html",
+      "genre": "atmospheric",
+      "macrostructure": "Workbench",
+      "theme": "lumen",
+      "drop": "night",
+      "knobs": {
+        "meter_ticks": 64,
+        "apparatus": "signal-chain-svg",
+        "accent": "molten-brass+coral"
+      }
+    }
+  ]
+}
