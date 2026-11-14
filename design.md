@@ -15,7 +15,7 @@ Obsidian Broadcast Studio (applied consistently across both Web Viewer and Windo
 | `--text-primary` | `#fafafa` | Primary headings, active states |
 | `--text-secondary` | `#a1a1aa` | Body descriptions, inactive tabs |
 | `--text-muted` | `#71717a` | Hints, secondary metadata keys |
-| `--accent` | `#38bdf8` | Signal Cyan - single primary brand accent, bitrate bar, toggles, CTA |
+| `--accent` | `#84cc16` | Lime Green - primary brand accent, radar, bitrate slider, toggles, CTA |
 | `--live` | `#22c55e` | Semantic Live / Discord PID isolated indicator |
 | `--danger` | `#ef4444` | Semantic Stop Sharing / error state |
 

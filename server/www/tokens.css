@@ -1,21 +1,17 @@
-/* Obsidian Broadcast Studio Tokens (mirrored in server/www/index.html for zero-dependency reliability) */
+/* Obsidian Cinema + Lime Green Tokens */
 :root {
-  --bg-canvas: #09090b;
-  --bg-surface: #111114;
-  --bg-elevated: #18181d;
-  --bg-hover: #202027;
-  --border-hairline: rgba(255, 255, 255, 0.08);
+  --bg-void: #030305;
+  --bg-panel: rgba(12, 14, 12, 0.78);
+  --bg-chip: rgba(255, 255, 255, 0.06);
+  --bg-chip-hover: rgba(255, 255, 255, 0.13);
+  --border-hairline: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --border-highlight: rgba(255, 255, 255, 0.06);
-
-  --text-primary: #fafafa;
+  --text-primary: #fbfbfb;
   --text-secondary: #a1a1aa;
   --text-muted: #71717a;
-
-  --accent: #38bdf8;
-  --accent-soft: rgba(56, 189, 248, 0.12);
-  --accent-border: rgba(56, 189, 248, 0.36);
-
-  --live: #22c55e;
-  --danger: #ef4444;
+  --accent: #84cc16;
+  --accent-light: #bef264;
+  --accent-soft: rgba(132, 204, 22, 0.18);
+  --live: #84cc16;
+  --live-red: #ef4444;
 }

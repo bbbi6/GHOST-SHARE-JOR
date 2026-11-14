@@ -20,8 +20,8 @@ constexpr uint32_t TEXT_SECONDARY = 0xA1A1AA;
 constexpr uint32_t TEXT_MUTED     = 0x71717A;
 constexpr uint32_t TEXT_DARK      = 0x09090B;
 
-constexpr uint32_t ACCENT       = 0x38BDF8; // Signal Cyan
-constexpr uint32_t ACCENT_HOVER = 0x67CEFA;
+constexpr uint32_t ACCENT       = 0x84CC16; // Lime Green
+constexpr uint32_t ACCENT_HOVER = 0xA3E635;
 constexpr uint32_t LIVE_GREEN   = 0x22C55E; // Semantic Live
 constexpr uint32_t DANGER_RED   = 0xEF4444; // Semantic Stop / Error
 constexpr uint32_t DANGER_TEXT  = 0xFCA5A5;
