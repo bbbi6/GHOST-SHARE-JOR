@@ -1,29 +1,37 @@
 #pragma once
 #include <d2d1.h>
 #include <dwrite.h>
-#include <dwrite_3.h>
 #include <stdint.h>
 #include <string>
-#include <vector>
+#include <initializer_list>
 #include <windows.h>
 
-namespace LumenTheme {
+namespace StudioTheme {
 
-// Lumen · Night Foundry (OKLCH -> sRGB hex equivalents)
-constexpr uint32_t PAPER      = 0x0A0A10; // oklch(13% 0.014 265)
-constexpr uint32_t PAPER_2    = 0x12121B; // oklch(17% 0.016 265)
-constexpr uint32_t PAPER_3    = 0x1A1A26; // oklch(21% 0.018 265)
-constexpr uint32_t INK        = 0xF1F1F5; // oklch(96% 0.006 262)
-constexpr uint32_t INK_2      = 0xB6B7C0; // oklch(78% 0.01 262)
-constexpr uint32_t MUTED      = 0x858691; // oklch(62% 0.01 262)
-constexpr uint32_t ACCENT     = 0xF29C38; // oklch(76% 0.17 50) molten brass
-constexpr uint32_t ACCENT_2   = 0xEB675E; // oklch(68% 0.16 18) coral chord
+// Obsidian Broadcast Studio palette (synced 1:1 with server/www/index.html)
+constexpr uint32_t BG_CANVAS    = 0x09090B;
+constexpr uint32_t BG_SURFACE   = 0x111114;
+constexpr uint32_t BG_ELEVATED  = 0x18181D;
+constexpr uint32_t BG_HOVER     = 0x202027;
+constexpr uint32_t BG_ACTIVE    = 0x25252E;
 
-constexpr float RULE_ALPHA        = 0.08f;
-constexpr float RULE_2_ALPHA      = 0.16f;
-constexpr float BLUEPRINT_ALPHA   = 0.04f;
-constexpr float PAPER_EMIT_ALPHA  = 0.06f;
-constexpr float GLOW_ALPHA        = 0.35f;
+constexpr uint32_t TEXT_PRIMARY   = 0xFAFAFA;
+constexpr uint32_t TEXT_SECONDARY = 0xA1A1AA;
+constexpr uint32_t TEXT_MUTED     = 0x71717A;
+constexpr uint32_t TEXT_DARK      = 0x09090B;
+
+constexpr uint32_t ACCENT       = 0x38BDF8; // Signal Cyan
+constexpr uint32_t ACCENT_HOVER = 0x67CEFA;
+constexpr uint32_t LIVE_GREEN   = 0x22C55E; // Semantic Live
+constexpr uint32_t DANGER_RED   = 0xEF4444; // Semantic Stop / Error
+constexpr uint32_t DANGER_TEXT  = 0xFCA5A5;
+
+constexpr float BORDER_ALPHA     = 0.08f;
+constexpr float BORDER_STR_ALPHA = 0.16f;
+constexpr float HIGHLIGHT_ALPHA  = 0.06f;
+constexpr float ACCENT_BG_ALPHA  = 0.14f;
+constexpr float DANGER_BG_ALPHA  = 0.15f;
+constexpr float GREEN_BG_ALPHA   = 0.14f;
 
 inline D2D1_COLOR_F color(uint32_t rgb, float alpha = 1.0f) {
   return D2D1::ColorF(
@@ -34,82 +42,33 @@ inline D2D1_COLOR_F color(uint32_t rgb, float alpha = 1.0f) {
 }
 
 struct FontSet {
-  IDWriteFontCollection* collection = nullptr; // nullptr => system fallback
   std::wstring bodyFamily = L"Segoe UI";
   std::wstring monoFamily = L"Consolas";
-  std::wstring displayFamily = L"Georgia";
-
-  void release() {
-    if (collection) {
-      collection->Release();
-      collection = nullptr;
-    }
-  }
 };
 
-// Loads optional .ttf/.otf fonts from <exeDir>\fonts\ via IDWriteFactory5.
-// Falls back cleanly to standard Windows faces if the directory is absent.
-inline FontSet load_fonts(IDWriteFactory* baseFactory) {
+inline std::wstring pick_system_font(IDWriteFactory* dw, std::initializer_list<const wchar_t*> candidates, const wchar_t* fallback) {
+  if (!dw) return fallback;
+  IDWriteFontCollection* col = nullptr;
+  if (FAILED(dw->GetSystemFontCollection(&col, FALSE)) || !col) return fallback;
+
+  std::wstring picked = fallback;
+  for (const wchar_t* name : candidates) {
+    UINT32 idx = 0;
+    BOOL exists = FALSE;
+    if (SUCCEEDED(col->FindFamilyName(name, &idx, &exists)) && exists) {
+      picked = name;
+      break;
+    }
+  }
+  col->Release();
+  return picked;
+}
+
+inline FontSet load_fonts(IDWriteFactory* dw) {
   FontSet fs;
-  if (!baseFactory) return fs;
-
-  wchar_t exePath[MAX_PATH] = {};
-  GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-  std::wstring dir(exePath);
-  size_t slash = dir.find_last_of(L"\\/");
-  if (slash != std::wstring::npos) dir = dir.substr(0, slash);
-  std::wstring fontsDir = dir + L"\\fonts";
-
-  WIN32_FIND_DATAW fd = {};
-  HANDLE hFind = FindFirstFileW((fontsDir + L"\\*.ttf").c_str(), &fd);
-  if (hFind == INVALID_HANDLE_VALUE) {
-    return fs;
-  }
-
-  std::vector<std::wstring> files;
-  do {
-    if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-      files.push_back(fontsDir + L"\\" + fd.cFileName);
-    }
-  } while (FindNextFileW(hFind, &fd));
-  FindClose(hFind);
-
-  if (files.empty()) return fs;
-
-  IDWriteFactory5* factory5 = nullptr;
-  if (FAILED(baseFactory->QueryInterface(__uuidof(IDWriteFactory5), reinterpret_cast<void**>(&factory5))) || !factory5) {
-    return fs;
-  }
-
-  IDWriteFontSetBuilder1* builder = nullptr;
-  if (SUCCEEDED(factory5->CreateFontSetBuilder(&builder)) && builder) {
-    for (const auto& path : files) {
-      IDWriteFontFile* fontFile = nullptr;
-      if (SUCCEEDED(factory5->CreateFontFileReference(path.c_str(), nullptr, &fontFile)) && fontFile) {
-        builder->AddFontFile(fontFile);
-        fontFile->Release();
-      }
-    }
-    IDWriteFontSet* fontSet = nullptr;
-    if (SUCCEEDED(builder->CreateFontSet(&fontSet)) && fontSet) {
-      IDWriteFontCollection1* col1 = nullptr;
-      if (SUCCEEDED(factory5->CreateFontCollectionFromFontSet(fontSet, &col1)) && col1) {
-        fs.collection = col1;
-        auto has_family = [&](const wchar_t* name) -> bool {
-          UINT32 idx = 0;
-          BOOL exists = FALSE;
-          return SUCCEEDED(col1->FindFamilyName(name, &idx, &exists)) && exists;
-        };
-        if (has_family(L"Geist")) fs.bodyFamily = L"Geist";
-        if (has_family(L"JetBrains Mono")) fs.monoFamily = L"JetBrains Mono";
-        if (has_family(L"Instrument Serif")) fs.displayFamily = L"Instrument Serif";
-      }
-      fontSet->Release();
-    }
-    builder->Release();
-  }
-  factory5->Release();
+  fs.bodyFamily = pick_system_font(dw, {L"Segoe UI Variable Text", L"Segoe UI"}, L"Segoe UI");
+  fs.monoFamily = pick_system_font(dw, {L"Cascadia Mono", L"Consolas"}, L"Consolas");
   return fs;
 }
 
-} // namespace LumenTheme
+} // namespace StudioTheme

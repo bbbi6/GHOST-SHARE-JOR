@@ -1,54 +1,21 @@
-/* Hallmark · genre: atmospheric · macrostructure: Workbench · theme: lumen · drop: night · design-system: design.md · designed-as-app */
+/* Obsidian Broadcast Studio Tokens (mirrored in server/www/index.html for zero-dependency reliability) */
 :root {
-  /* Surfaces */
-  --color-paper: oklch(13% 0.014 265);
-  --color-paper-2: oklch(17% 0.016 265);
-  --color-paper-3: oklch(21% 0.018 265);
+  --bg-canvas: #09090b;
+  --bg-surface: #111114;
+  --bg-elevated: #18181d;
+  --bg-hover: #202027;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-highlight: rgba(255, 255, 255, 0.06);
 
-  /* Rules */
-  --color-rule: oklch(96% 0.006 262 / 0.08);
-  --color-rule-2: oklch(96% 0.006 262 / 0.16);
-  --rule-blueprint: oklch(96% 0.006 262 / 0.04);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
 
-  /* Ink */
-  --color-ink: oklch(96% 0.006 262);
-  --color-ink-2: oklch(78% 0.01 262);
-  --color-muted: oklch(62% 0.01 262);
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.12);
+  --accent-border: rgba(56, 189, 248, 0.36);
 
-  /* Accents — Molten Brass & Coral Chord */
-  --color-accent: oklch(76% 0.17 50);
-  --color-accent-2: oklch(68% 0.16 18);
-  --color-focus: oklch(76% 0.17 50);
-  --color-glow: oklch(80% 0.16 50 / 0.42);
-  --color-paper-emit: oklch(76% 0.17 50 / 0.04);
-
-  /* Typography */
-  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
-  --font-body: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-label: "JetBrains Mono", Consolas, ui-monospace, monospace;
-
-  /* Type Scale */
-  --text-xs: 0.6875rem;   /* 11px */
-  --text-sm: 0.75rem;     /* 12px */
-  --text-base: 0.875rem;  /* 14px */
-  --text-lg: 1.125rem;    /* 18px */
-  --text-hero: clamp(2rem, 4.5vw, 3.25rem);
-
-  /* Spacing (4pt scale) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-
-  /* Radii */
-  --radius-sm: 2px;
-  --radius-md: 4px;
-
-  /* Motion */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-fast: 140ms;
-  --dur-med: 260ms;
+  --live: #22c55e;
+  --danger: #ef4444;
 }

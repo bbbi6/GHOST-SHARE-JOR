@@ -3,14 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ghost share jor — broadcast viewer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/tokens.css">
+  <title>Ghost Share Jor - Broadcast Viewer</title>
   <style>
-    /* Hallmark · genre: atmospheric · macrostructure: Workbench · theme: lumen · drop: night · design-system: design.md · designed-as-app */
-    /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+    /* Self-contained Obsidian Broadcast Studio tokens (works over HTTP, subpath routes, and file://) */
+    :root {
+      --bg-canvas: #09090b;
+      --bg-surface: #111114;
+      --bg-elevated: #18181d;
+      --bg-hover: #202027;
+      --border-hairline: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --border-highlight: rgba(255, 255, 255, 0.06);
+
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.12);
+      --accent-border: rgba(56, 189, 248, 0.36);
+
+      --live: #22c55e;
+      --live-glow: rgba(34, 197, 94, 0.45);
+      --danger: #ef4444;
+
+      --font-sans: "Geist", "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --dur-fast: 140ms;
+      --dur-med: 240ms;
+    }
 
     *, *::before, *::after {
       box-sizing: border-box;
@@ -21,12 +48,13 @@
     html, body {
       width: 100%;
       height: 100%;
+      min-height: 100dvh;
       overflow: hidden;
       overflow-x: clip;
-      background-color: var(--color-paper);
-      color: var(--color-ink);
-      font-family: var(--font-body);
-      font-size: var(--text-base);
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
       user-select: none;
@@ -34,12 +62,12 @@
 
     .stage {
       position: relative;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
       height: 100dvh;
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       place-items: center;
-      background-color: var(--color-paper);
+      background-color: var(--bg-canvas);
       overflow: hidden;
     }
 
@@ -48,175 +76,195 @@
       height: 100%;
       object-fit: contain;
       display: block;
-      background-color: var(--color-paper);
+      background-color: var(--bg-canvas);
     }
 
     video.cover {
       object-fit: cover;
     }
 
-    .mono-label {
-      font-family: var(--font-label);
-      font-size: var(--text-xs);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+    .mono {
+      font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
-      line-height: 1;
     }
 
-    /* Top Edge-Aligned Instrument Bar */
+    /* Top Studio Bar */
     .top-bar {
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 16px;
+      left: 16px;
+      right: 16px;
       z-index: 20;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
-      background-color: var(--color-paper-2);
-      border-bottom: 1px solid var(--color-rule);
+      gap: 12px;
+      pointer-events: none;
       opacity: 0;
       transform: translateY(-6px);
       transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
-      pointer-events: none;
     }
 
     .stage.hud-visible .top-bar,
+    .stage:not(.is-live) .top-bar,
     .stage:focus-within .top-bar {
       opacity: 1;
       transform: translateY(0);
-      pointer-events: auto;
     }
 
-    .brand-group {
+    .top-pill {
+      pointer-events: auto;
       display: inline-flex;
       align-items: center;
-      gap: var(--space-3);
+      gap: 10px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: var(--radius-md);
+      background-color: rgba(17, 17, 20, 0.92);
+      border: 1px solid var(--border-hairline);
+      box-shadow: inset 0 1px 0 var(--border-highlight), 0 8px 24px rgba(0, 0, 0, 0.45);
       min-width: 0;
     }
 
-    .emitter-dot {
-      width: 6px;
-      height: 6px;
+    .status-dot {
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background-color: var(--color-muted);
+      background-color: var(--text-muted);
       flex-shrink: 0;
       transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
     }
 
-    .stage.is-live .emitter-dot {
-      background-color: var(--color-accent);
-      box-shadow: 0 0 8px var(--color-glow);
+    .stage.is-live .status-dot {
+      background-color: var(--live);
+      box-shadow: 0 0 10px var(--live-glow);
     }
 
-    .brand-title {
-      font-family: var(--font-body);
-      font-size: var(--text-sm);
-      font-weight: 500;
-      color: var(--color-ink);
-      text-transform: lowercase;
+    .brand-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
       line-height: 1;
       white-space: nowrap;
     }
 
-    .room-chip {
-      color: var(--color-muted);
-      padding-left: var(--space-3);
-      border-left: 1px solid var(--color-rule);
+    .divider-v {
+      width: 1px;
+      height: 14px;
+      background-color: var(--border-hairline);
+      flex-shrink: 0;
+    }
+
+    .room-tag {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+      line-height: 1;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .telemetry-strip {
+    .telemetry-pill {
+      pointer-events: auto;
       display: inline-flex;
       align-items: center;
-      gap: var(--space-4);
+      gap: 14px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: var(--radius-md);
+      background-color: rgba(17, 17, 20, 0.92);
+      border: 1px solid var(--border-hairline);
+      box-shadow: inset 0 1px 0 var(--border-highlight), 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-size: 11.5px;
+      line-height: 1;
       flex-shrink: 0;
     }
 
-    .telemetry-strip.hidden {
+    .telemetry-pill.hidden,
+    .stage:not(.is-live) .telemetry-pill {
       display: none;
     }
 
-    .stat-pair {
+    .stat-item {
       display: inline-flex;
       align-items: center;
-      gap: var(--space-1);
+      gap: 6px;
     }
 
-    .stat-key {
-      color: var(--color-muted);
+    .stat-k {
+      color: var(--text-muted);
+      font-size: 10.5px;
+      letter-spacing: 0.06em;
     }
 
-    .stat-val {
-      color: var(--color-ink);
+    .stat-v {
+      color: var(--text-primary);
+      font-weight: 500;
     }
 
-    .stat-val.is-brass {
-      color: var(--color-accent);
+    .stat-v.accent {
+      color: var(--accent);
     }
 
-    /* Unmute Action Bar */
+    /* Unmute CTA (only visible when stream is live and muted) */
     .unmute-pill {
       position: absolute;
-      top: 56px;
+      top: 68px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 25;
       display: inline-flex;
       align-items: center;
-      gap: var(--space-2);
-      padding: var(--space-2) var(--space-4);
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--color-accent);
-      background-color: var(--color-paper-2);
-      color: var(--color-ink);
-      font-family: var(--font-body);
-      font-size: var(--text-sm);
+      gap: 8px;
+      height: 38px;
+      padding: 0 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--accent-border);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
       font-weight: 500;
-      text-transform: lowercase;
       line-height: 1;
       cursor: pointer;
-      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+      box-shadow: inset 0 1px 0 var(--border-highlight), 0 12px 32px rgba(0, 0, 0, 0.55);
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
     }
 
     .unmute-pill:hover {
-      background-color: var(--color-paper-emit);
-      color: var(--color-accent);
-    }
-
-    .unmute-pill:focus-visible {
-      outline: 1px solid var(--color-focus);
-      outline-offset: 2px;
+      background-color: var(--bg-elevated);
+      border-color: var(--accent);
     }
 
     .unmute-pill:active {
-      background-color: var(--color-paper-3);
+      transform: translateX(-50%) scale(0.98);
     }
 
+    .unmute-pill:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .stage:not(.is-live) .unmute-pill,
     .unmute-pill.hidden {
       display: none;
     }
 
-    /* Standby Instrument Canvas */
+    /* Standby Panel */
     .standby-overlay {
       position: absolute;
       inset: 0;
       z-index: 18;
+      width: 100%;
+      max-width: 100%;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: var(--space-6);
-      background-color: var(--color-paper);
-      background-image:
-        linear-gradient(to right, var(--rule-blueprint) 1px, transparent 1px),
-        linear-gradient(to bottom, var(--rule-blueprint) 1px, transparent 1px);
-      background-size: 32px 32px;
+      padding: 20px;
+      background-color: var(--bg-canvas);
+      background-image: radial-gradient(ellipse 60% 45% at 50% 42%, rgba(56, 189, 248, 0.06) 0%, transparent 70%);
       transition: opacity var(--dur-med) var(--ease-out), visibility var(--dur-med) var(--ease-out);
     }
 
@@ -226,184 +274,220 @@
       pointer-events: none;
     }
 
-    .standby-frame {
+    .standby-card {
       width: 100%;
-      max-width: 640px;
-      border: 1px solid var(--color-rule);
-      border-radius: var(--radius-md);
-      background-color: var(--color-paper-2);
-      padding: var(--space-6);
+      max-width: min(440px, 100%);
+      min-width: 0;
+      border-radius: var(--radius-lg);
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+      box-shadow: inset 0 1px 0 var(--border-highlight), 0 24px 64px rgba(0, 0, 0, 0.65);
+      padding: 28px;
       display: flex;
       flex-direction: column;
-      gap: var(--space-5);
+      gap: 20px;
     }
 
-    .standby-header {
+    .standby-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: var(--space-3);
-      padding-bottom: var(--space-3);
-      border-bottom: 1px solid var(--color-rule);
+      gap: 12px;
     }
 
-    .standby-kicker {
-      color: var(--color-accent);
+    .receiver-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background-color: var(--bg-elevated);
+      border: 1px solid var(--border-hairline);
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      flex-shrink: 0;
     }
 
-    .standby-room {
-      color: var(--color-muted);
+    .state-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      background-color: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      line-height: 1;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent);
+      animation: softPulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes softPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .standby-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     .standby-title {
-      font-family: var(--font-display);
-      font-size: var(--text-hero);
-      font-weight: 400;
-      font-style: normal;
-      line-height: 1.08;
-      letter-spacing: -0.01em;
-      color: var(--color-ink);
-      text-transform: lowercase;
-      max-width: 18ch;
-    }
-
-    .verb-accent {
-      color: var(--color-accent-2);
-      border-bottom: 1px solid var(--color-accent-2);
-      padding-bottom: 2px;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      color: var(--text-primary);
     }
 
     .standby-desc {
-      font-size: var(--text-base);
-      color: var(--color-ink-2);
-      text-transform: lowercase;
-      max-width: 52ch;
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      max-width: 42ch;
     }
 
-    /* Hand-Built Signal Chain Apparatus */
-    .apparatus-box {
-      border: 1px solid var(--color-rule);
+    .standby-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .meta-cell {
+      background-color: var(--bg-elevated);
+      border: 1px solid var(--border-hairline);
       border-radius: var(--radius-sm);
-      background-color: var(--color-paper);
-      padding: var(--space-4);
-    }
-
-    .apparatus-svg {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-
-    .standby-callouts {
+      padding: 8px 10px;
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-3);
-      padding-top: var(--space-3);
-      border-top: 1px solid var(--color-rule);
-      color: var(--color-muted);
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
     }
 
-    /* Bottom Workbench Dock */
+    .meta-k {
+      font-size: 10px;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+    }
+
+    .meta-v {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Bottom Playback Dock (hidden until live) */
     .bottom-dock {
       position: absolute;
-      left: var(--space-4);
-      right: var(--space-4);
-      bottom: var(--space-4);
+      left: 16px;
+      right: 16px;
+      bottom: 20px;
       z-index: 20;
-      max-width: 960px;
+      max-width: 780px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: var(--space-2);
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-md);
-      background-color: var(--color-paper-2);
-      border: 1px solid var(--color-rule);
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: var(--radius-lg);
+      background-color: rgba(17, 17, 20, 0.94);
+      border: 1px solid var(--border-hairline);
+      box-shadow: inset 0 1px 0 var(--border-highlight), 0 16px 40px rgba(0, 0, 0, 0.6);
       opacity: 0;
       transform: translateY(8px);
       transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
       pointer-events: none;
     }
 
-    .stage.hud-visible .bottom-dock,
-    .stage:focus-within .bottom-dock {
+    .stage.is-live.hud-visible .bottom-dock,
+    .stage.is-live:focus-within .bottom-dock {
       opacity: 1;
       transform: translateY(0);
       pointer-events: auto;
     }
 
-    /* Real-Data Meter Strip */
     .meter-strip {
       display: grid;
-      grid-template-columns: repeat(64, 1fr);
+      grid-template-columns: repeat(48, 1fr);
       align-items: end;
       gap: 3px;
-      height: 18px;
-      padding-bottom: var(--space-2);
-      border-bottom: 1px solid var(--color-rule);
+      height: 14px;
     }
 
     .meter-tick {
       width: 100%;
       min-height: 2px;
       height: 2px;
-      background-color: var(--color-rule-2);
+      border-radius: 1px;
+      background-color: rgba(255, 255, 255, 0.12);
       transition: height var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
     }
 
     .meter-tick.active {
-      background-color: var(--color-accent);
+      background-color: var(--accent);
     }
 
     .dock-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: var(--space-3);
-      min-height: 32px;
+      gap: 10px;
     }
 
     .dock-group {
       display: inline-flex;
       align-items: center;
-      gap: var(--space-2);
+      gap: 8px;
     }
 
     .ctrl-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: var(--space-2);
-      height: 30px;
-      padding: 0 var(--space-3);
+      gap: 6px;
+      height: 32px;
+      padding: 0 11px;
       border-radius: var(--radius-sm);
-      border: 1px solid var(--color-rule);
-      background-color: var(--color-paper-3);
-      color: var(--color-ink-2);
-      font-family: var(--font-body);
-      font-size: var(--text-sm);
+      border: 1px solid var(--border-hairline);
+      background-color: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
       font-weight: 500;
-      text-transform: lowercase;
       line-height: 1;
       cursor: pointer;
       white-space: nowrap;
-      transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
     }
 
     .ctrl-btn:hover {
-      border-color: var(--color-rule-2);
-      color: var(--color-ink);
-    }
-
-    .ctrl-btn:focus-visible {
-      outline: 1px solid var(--color-focus);
-      outline-offset: 2px;
+      background-color: var(--bg-hover);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
     }
 
     .ctrl-btn:active {
-      background-color: var(--color-paper);
+      transform: scale(0.98);
+    }
+
+    .ctrl-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     .ctrl-btn:disabled {
@@ -412,65 +496,67 @@
     }
 
     .ctrl-btn.active {
-      border-color: var(--color-accent);
-      color: var(--color-accent);
-      background-color: var(--color-paper-emit);
+      border-color: var(--accent-border);
+      background-color: var(--accent-soft);
+      color: var(--accent);
     }
 
     .volume-wrap {
       display: inline-flex;
       align-items: center;
-      padding: 0 var(--space-2);
+      padding: 0 4px;
     }
 
     input[type="range"].volume-slider {
       -webkit-appearance: none;
       appearance: none;
-      width: 72px;
-      height: 2px;
-      background-color: var(--color-rule-2);
+      width: 76px;
+      height: 4px;
+      border-radius: 2px;
+      background-color: rgba(255, 255, 255, 0.14);
       outline: none;
       cursor: pointer;
-    }
-
-    input[type="range"].volume-slider:focus-visible {
-      outline: 1px solid var(--color-focus);
-      outline-offset: 4px;
     }
 
     input[type="range"].volume-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 10px;
-      height: 14px;
-      border-radius: 1px;
-      background-color: var(--color-accent);
-      border: 1px solid var(--color-paper);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: var(--text-primary);
+      border: 2px solid var(--bg-surface);
       cursor: pointer;
     }
 
-    .watch-timer {
-      color: var(--color-muted);
-      padding: 0 var(--space-2);
+    input[type="range"].volume-slider:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 4px;
     }
 
-    .stage.hud-idle {
+    .watch-timer {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      padding: 0 6px;
+      line-height: 1;
+    }
+
+    .stage.is-live.hud-idle {
       cursor: none;
     }
 
     @media (max-width: 640px) {
-      .room-chip,
+      .telemetry-pill .stat-item:nth-child(n+3),
       .volume-wrap,
-      .watch-timer,
-      .telemetry-strip .stat-pair:nth-child(n+3) {
+      .watch-timer {
         display: none;
       }
 
       .meter-strip {
-        grid-template-columns: repeat(32, 1fr);
+        grid-template-columns: repeat(24, 1fr);
       }
 
-      .meter-tick:nth-child(n+33) {
+      .meter-tick:nth-child(n+25) {
         display: none;
       }
 
@@ -479,11 +565,20 @@
       }
 
       .ctrl-btn {
-        padding: 0 var(--space-2);
+        width: 34px;
+        padding: 0;
       }
 
-      .standby-frame {
-        padding: var(--space-4);
+      .standby-card {
+        padding: 22px;
+      }
+
+      .standby-meta-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .standby-meta-grid .meta-cell:last-child {
+        grid-column: span 2;
       }
     }
 
@@ -499,119 +594,105 @@
   <main class="stage hud-visible" id="stage">
     <video id="videoPlayer" autoplay playsinline muted></video>
 
-    <!-- Edge-Aligned Top Bar -->
     <header class="top-bar">
-      <div class="brand-group">
-        <span class="emitter-dot" aria-hidden="true"></span>
-        <span class="brand-title">ghost share jor</span>
-        <span class="room-chip mono-label" id="roomLabel">ROOM / DEFAULT</span>
+      <div class="top-pill">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="brand-name">Ghost Share Jor</span>
+        <span class="divider-v" aria-hidden="true"></span>
+        <span class="room-tag mono" id="roomLabel">room / default</span>
       </div>
 
-      <div class="telemetry-strip mono-label" id="telemetryPill">
-        <span class="stat-pair"><span class="stat-key">RES</span><span class="stat-val" id="statRes">--</span></span>
-        <span class="stat-pair"><span class="stat-key">FPS</span><span class="stat-val" id="statFps">--</span></span>
-        <span class="stat-pair"><span class="stat-key">RATE</span><span class="stat-val is-brass" id="statRate">--</span></span>
-        <span class="stat-pair"><span class="stat-key">RTT</span><span class="stat-val" id="statRtt">--</span></span>
+      <div class="telemetry-pill mono" id="telemetryPill">
+        <span class="stat-item"><span class="stat-k">RES</span><span class="stat-v" id="statRes">--</span></span>
+        <span class="stat-item"><span class="stat-k">FPS</span><span class="stat-v" id="statFps">--</span></span>
+        <span class="stat-item"><span class="stat-k">RATE</span><span class="stat-v accent" id="statRate">--</span></span>
+        <span class="stat-item"><span class="stat-k">RTT</span><span class="stat-v" id="statRtt">--</span></span>
       </div>
     </header>
 
-    <!-- Tap to Unmute -->
-    <button class="unmute-pill" id="unmuteBtn" type="button" aria-label="unmute broadcast audio">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <button class="unmute-pill" id="unmuteBtn" type="button" aria-label="Unmute broadcast audio">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
         <line x1="23" y1="9" x2="17" y2="15"/>
         <line x1="17" y1="9" x2="23" y2="15"/>
       </svg>
-      <span>click to unmute stream</span>
+      <span>Click to unmute stream</span>
     </button>
 
-    <!-- Standby Apparatus Overlay -->
     <section class="standby-overlay" id="overlay" aria-live="polite">
-      <div class="standby-frame">
-        <div class="standby-header">
-          <span class="standby-kicker mono-label" id="statusKicker">STANDBY · WHEP RECEIVER</span>
-          <span class="standby-room mono-label" id="standbyMeta">ROOM · DEFAULT</span>
+      <div class="standby-card">
+        <div class="standby-head">
+          <div class="receiver-badge" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="14" rx="2"/>
+              <path d="M8 21h8"/>
+              <path d="M12 18v3"/>
+            </svg>
+          </div>
+          <div class="state-chip mono" id="statusKicker">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span id="statusKickerText">STANDBY</span>
+          </div>
         </div>
 
-        <h1 class="standby-title" id="statusTitle">waiting for the host to <span class="verb-accent">go</span> live.</h1>
-        <p class="standby-desc" id="statusDesc">screen share is not live yet. polling whep endpoint every 3 seconds.</p>
-
-        <div class="apparatus-box">
-          <svg class="apparatus-svg" viewBox="0 0 560 96" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="webrtc signal chain diagram from capture to encode to whip to room">
-            <line x1="68" y1="38" x2="178" y2="38" stroke="rgba(241,241,245,0.16)" stroke-width="1"/>
-            <line x1="226" y1="38" x2="334" y2="38" stroke="rgba(241,241,245,0.16)" stroke-width="1"/>
-            <line x1="382" y1="38" x2="492" y2="38" stroke="rgba(241,241,245,0.16)" stroke-width="1"/>
-
-            <!-- Node 1: CAPTURE -->
-            <rect x="12" y="22" width="56" height="32" rx="2" fill="#12121b" stroke="rgba(241,241,245,0.16)" stroke-width="1"/>
-            <text x="40" y="41" text-anchor="middle" fill="#b6b7c0" font-family="JetBrains Mono, Consolas, monospace" font-size="9" letter-spacing="1">CAPTURE</text>
-
-            <!-- Node 2: ENCODE -->
-            <rect x="178" y="22" width="48" height="32" rx="2" fill="#12121b" stroke="rgba(241,241,245,0.16)" stroke-width="1"/>
-            <text x="202" y="41" text-anchor="middle" fill="#b6b7c0" font-family="JetBrains Mono, Consolas, monospace" font-size="9" letter-spacing="1">H264</text>
-
-            <!-- Node 3: WHIP -->
-            <rect x="334" y="22" width="48" height="32" rx="2" fill="#12121b" stroke="rgba(241,241,245,0.16)" stroke-width="1"/>
-            <text x="358" y="41" text-anchor="middle" fill="#b6b7c0" font-family="JetBrains Mono, Consolas, monospace" font-size="9" letter-spacing="1">WHIP</text>
-
-            <!-- Node 4: ROOM (Brass Active Target) -->
-            <rect x="492" y="22" width="56" height="32" rx="2" fill="rgba(242,156,56,0.06)" stroke="#f29c38" stroke-width="1"/>
-            <text x="520" y="41" text-anchor="middle" fill="#f29c38" font-family="JetBrains Mono, Consolas, monospace" font-size="9" letter-spacing="1">WHEP</text>
-
-            <!-- Leader Callouts -->
-            <line x1="202" y1="54" x2="202" y2="72" stroke="rgba(241,241,245,0.14)" stroke-width="1"/>
-            <text x="202" y="84" text-anchor="middle" fill="#858691" font-family="JetBrains Mono, Consolas, monospace" font-size="8" letter-spacing="1">LOW-LATENCY</text>
-
-            <line x1="520" y1="54" x2="520" y2="72" stroke="rgba(242,156,56,0.45)" stroke-width="1"/>
-            <text x="520" y="84" text-anchor="middle" fill="#f29c38" font-family="JetBrains Mono, Consolas, monospace" font-size="8" letter-spacing="1">LISTENING</text>
-          </svg>
+        <div class="standby-copy">
+          <h1 class="standby-title" id="statusTitle">Waiting for host</h1>
+          <p class="standby-desc" id="statusDesc">Screen share is not live yet. Automatically checking for incoming broadcast every 3 seconds.</p>
         </div>
 
-        <div class="standby-callouts mono-label">
-          <span>PROTO · WEBRTC WHEP</span>
-          <span>RETRY · 3 S</span>
-          <span>AUDIO · OPUS 48KHZ</span>
+        <div class="standby-meta-grid">
+          <div class="meta-cell">
+            <span class="meta-k mono">ROOM</span>
+            <span class="meta-v mono" id="standbyMeta">default</span>
+          </div>
+          <div class="meta-cell">
+            <span class="meta-k mono">PROTOCOL</span>
+            <span class="meta-v mono">WebRTC WHEP</span>
+          </div>
+          <div class="meta-cell">
+            <span class="meta-k mono">AUDIO</span>
+            <span class="meta-v mono">Opus 48kHz</span>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Bottom Workbench Dock -->
     <footer class="bottom-dock">
       <div class="meter-strip" id="meterStrip" aria-hidden="true"></div>
 
       <div class="dock-row">
         <div class="dock-group">
-          <button class="ctrl-btn" id="audioToggle" type="button" title="mute or unmute (m)" aria-label="toggle mute">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-            <span class="btn-label">unmute</span>
+          <button class="ctrl-btn" id="audioToggle" type="button" title="Mute or unmute (M)" aria-label="Toggle mute">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+            <span class="btn-label">Unmute</span>
           </button>
 
           <div class="volume-wrap">
-            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.02" value="1" aria-label="volume">
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.02" value="1" aria-label="Volume">
           </div>
 
-          <span class="watch-timer mono-label" id="watchTimer">00:00</span>
+          <span class="watch-timer mono" id="watchTimer">00:00</span>
         </div>
 
         <div class="dock-group">
-          <button class="ctrl-btn" id="fitBtn" type="button" title="toggle fit or fill" aria-label="toggle video aspect fit">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 9H6v2m10-2h2v2m-10 4H6v-2m10 2h2v-2"/></svg>
-            <span class="btn-label" id="fitLabel">fit</span>
+          <button class="ctrl-btn" id="fitBtn" type="button" title="Toggle Fit or Fill" aria-label="Toggle video fit">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 9H6v2m10-2h2v2m-10 4H6v-2m10 2h2v-2"/></svg>
+            <span class="btn-label" id="fitLabel">Fit</span>
           </button>
 
-          <button class="ctrl-btn" id="statsBtn" type="button" title="toggle telemetry" aria-label="toggle telemetry">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
-            <span class="btn-label">stats</span>
+          <button class="ctrl-btn" id="statsBtn" type="button" title="Toggle telemetry" aria-label="Toggle telemetry">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+            <span class="btn-label">Stats</span>
           </button>
 
-          <button class="ctrl-btn" id="pipBtn" type="button" title="picture in picture (p)" aria-label="picture in picture">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="1"/><rect x="12" y="11" width="7" height="5" rx="1"/></svg>
-            <span class="btn-label">pip</span>
+          <button class="ctrl-btn" id="pipBtn" type="button" title="Picture in Picture (P)" aria-label="Picture in Picture">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1"/></svg>
+            <span class="btn-label">PiP</span>
           </button>
 
-          <button class="ctrl-btn" id="fullscreenBtn" type="button" title="fullscreen (f)" aria-label="toggle fullscreen">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-            <span class="btn-label">full</span>
+          <button class="ctrl-btn" id="fullscreenBtn" type="button" title="Fullscreen (F)" aria-label="Toggle fullscreen">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            <span class="btn-label">Full</span>
           </button>
         </div>
       </div>
@@ -619,20 +700,19 @@
   </main>
 
   <script>
-    // Extract room id from URL: /r/{room_id} or ?room={room_id}
-    const pathParts = window.location.pathname.split('/');
-    let roomId = pathParts[pathParts.length - 1];
-    if (!roomId || roomId === 'r' || roomId === '') {
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    let roomId = pathParts[pathParts.length - 1] || '';
+    if (!roomId || roomId === 'r' || roomId.toLowerCase().endsWith('.html')) {
       const urlParams = new URLSearchParams(window.location.search);
       roomId = urlParams.get('room') || 'default';
     }
-    document.getElementById('roomLabel').textContent = `ROOM / ${roomId}`;
-    document.getElementById('standbyMeta').textContent = `ROOM · ${roomId}`;
+    document.getElementById('roomLabel').textContent = `room / ${roomId}`;
+    document.getElementById('standbyMeta').textContent = roomId;
 
     const stage = document.getElementById('stage');
     const video = document.getElementById('videoPlayer');
     const overlay = document.getElementById('overlay');
-    const statusKicker = document.getElementById('statusKicker');
+    const statusKickerText = document.getElementById('statusKickerText');
     const statusTitle = document.getElementById('statusTitle');
     const statusDesc = document.getElementById('statusDesc');
     const unmuteBtn = document.getElementById('unmuteBtn');
@@ -654,8 +734,7 @@
 
     const whepEndpoint = `${window.location.origin}/${roomId}/whep`;
 
-    // Build 64 real-data meter ticks
-    const TICK_COUNT = 64;
+    const TICK_COUNT = 48;
     const meterHistory = new Array(TICK_COUNT).fill(0);
     const tickEls = [];
     for (let i = 0; i < TICK_COUNT; i++) {
@@ -671,7 +750,7 @@
       const peak = Math.max(4, ...meterHistory);
       for (let i = 0; i < TICK_COUNT; i++) {
         const val = meterHistory[i];
-        const px = val > 0 ? Math.max(3, Math.round((val / peak) * 16)) : 2;
+        const px = val > 0 ? Math.max(3, Math.round((val / peak) * 14)) : 2;
         tickEls[i].style.height = `${px}px`;
         tickEls[i].classList.toggle('active', val > 0.05);
       }
@@ -748,7 +827,7 @@
           stats.forEach((report) => {
             if (report.type === 'inbound-rtp' && report.kind === 'video') {
               if (report.frameWidth && report.frameHeight) {
-                statRes.textContent = `${report.frameWidth}X${report.frameHeight}`;
+                statRes.textContent = `${report.frameWidth}x${report.frameHeight}`;
               }
               if (typeof report.framesPerSecond === 'number') {
                 statFps.textContent = `${Math.round(report.framesPerSecond)}`;
@@ -756,7 +835,7 @@
               const now = report.timestamp;
               if (prevStatsTime > 0 && now > prevStatsTime && report.bytesReceived >= prevBytesReceived) {
                 const mbps = ((report.bytesReceived - prevBytesReceived) * 8) / ((now - prevStatsTime) * 1000);
-                statRate.textContent = `${mbps.toFixed(1)} MBPS`;
+                statRate.textContent = `${mbps.toFixed(1)} Mbps`;
                 renderMeter(mbps);
               }
               prevBytesReceived = report.bytesReceived;
@@ -767,7 +846,7 @@
             }
           });
           if (rttMs !== null) {
-            statRtt.textContent = `${rttMs} MS`;
+            statRtt.textContent = `${rttMs} ms`;
           }
         } catch (_) {}
       }, 1200);
@@ -791,9 +870,9 @@
       stopWatchTimer();
       stage.classList.remove('is-live');
 
-      statusKicker.textContent = 'HANDSHAKE · WHEP';
-      statusTitle.innerHTML = 'connecting to <span class="verb-accent">room</span>.';
-      statusDesc.textContent = `establishing low-latency handshake for "${roomId}".`;
+      statusKickerText.textContent = 'CONNECTING';
+      statusTitle.textContent = 'Connecting to room';
+      statusDesc.textContent = `Establishing low-latency stream for room "${roomId}".`;
       overlay.classList.remove('hidden');
       wakeHud();
 
@@ -837,9 +916,9 @@
           wakeHud();
         } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           stage.classList.remove('is-live');
-          statusKicker.textContent = 'SIGNAL · INTERRUPTED';
-          statusTitle.innerHTML = 'host <span class="verb-accent">disconnected</span>.';
-          statusDesc.textContent = 'waiting for host to resume sharing. retrying in 3 seconds.';
+          statusKickerText.textContent = 'RECONNECTING';
+          statusTitle.textContent = 'Host disconnected';
+          statusDesc.textContent = 'Waiting for host to resume sharing. Retrying in 3 seconds.';
           overlay.classList.remove('hidden');
           stopStatsPolling();
           stopWatchTimer();
@@ -881,9 +960,9 @@
         video.play().catch(() => {});
       } catch (err) {
         stage.classList.remove('is-live');
-        statusKicker.textContent = 'STANDBY · WHEP RECEIVER';
-        statusTitle.innerHTML = 'waiting for the host to <span class="verb-accent">go</span> live.';
-        statusDesc.textContent = 'screen share is not live yet. polling whep endpoint every 3 seconds.';
+        statusKickerText.textContent = 'STANDBY';
+        statusTitle.textContent = 'Waiting for host';
+        statusDesc.textContent = 'Screen share is not live yet. Retrying automatically every 3 seconds.';
         overlay.classList.remove('hidden');
         scheduleRetry();
       }
@@ -894,15 +973,15 @@
       retryTimeout = setTimeout(startWHEP, 3000);
     }
 
-    const iconSoundOn = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
-    const iconSoundOff = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+    const iconSoundOn = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+    const iconSoundOff = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
 
     function syncAudioUi() {
       if (video.muted || video.volume === 0) {
-        audioToggle.innerHTML = `${iconSoundOff}<span class="btn-label">unmute</span>`;
+        audioToggle.innerHTML = `${iconSoundOff}<span class="btn-label">Unmute</span>`;
       } else {
         unmuteBtn.classList.add('hidden');
-        audioToggle.innerHTML = `${iconSoundOn}<span class="btn-label">mute</span>`;
+        audioToggle.innerHTML = `${iconSoundOn}<span class="btn-label">Mute</span>`;
       }
     }
 
@@ -936,7 +1015,7 @@
 
     fitBtn.addEventListener('click', () => {
       const isCover = video.classList.toggle('cover');
-      fitLabel.textContent = isCover ? 'fill' : 'fit';
+      fitLabel.textContent = isCover ? 'Fill' : 'Fit';
       fitBtn.classList.toggle('active', isCover);
     });
 
