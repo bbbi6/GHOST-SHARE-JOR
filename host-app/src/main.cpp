@@ -13,6 +13,7 @@
 #include <mutex>
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -30,8 +31,8 @@
 #include "ghost_share_core.h"
 #include "theme.h"
 
-static const int WINDOW_WIDTH = 480;
-static const int WINDOW_HEIGHT = 596;
+static const int WINDOW_WIDTH = 488;
+static const int WINDOW_HEIGHT = 616;
 
 static HWND g_hwnd = nullptr;
 static ID2D1Factory* g_d2d = nullptr;
@@ -393,6 +394,57 @@ static void draw_toggle_switch(
     rt->FillEllipse(thumb, bThumb);
 }
 
+static void draw_cinema_ambient(ID2D1RenderTarget* rt, float w) {
+    D2D1_GRADIENT_STOP stops[3] = {
+        { 0.00f, StudioTheme::color(StudioTheme::ACCENT, 0.095f) },
+        { 0.55f, StudioTheme::color(StudioTheme::ACCENT, 0.020f) },
+        { 1.00f, StudioTheme::color(StudioTheme::BG_VOID, 0.0f) }
+    };
+    ID2D1GradientStopCollection* stopCol = nullptr;
+    if (SUCCEEDED(rt->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &stopCol)) && stopCol) {
+        ID2D1RadialGradientBrush* radial = nullptr;
+        D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES props = D2D1::RadialGradientBrushProperties(
+            D2D1::Point2F(w * 0.5f, 70.0f), D2D1::Point2F(0.0f, 0.0f), w * 0.72f, 260.0f
+        );
+        if (SUCCEEDED(rt->CreateRadialGradientBrush(props, stopCol, &radial)) && radial) {
+            rt->FillRectangle(D2D1::RectF(0.0f, 0.0f, w, 340.0f), radial);
+            radial->Release();
+        }
+        stopCol->Release();
+    }
+}
+
+static void draw_ghost_emblem(ID2D1RenderTarget* rt, float cx, float cy, float s, ID2D1Brush* bLime, ID2D1Brush* bEyes) {
+    if (!g_d2d) return;
+    ID2D1PathGeometry* geo = nullptr;
+    if (FAILED(g_d2d->CreatePathGeometry(&geo)) || !geo) return;
+    ID2D1GeometrySink* sink = nullptr;
+    if (SUCCEEDED(geo->Open(&sink)) && sink) {
+        // Maps normalized [-1..1] SVG Ghost silhouette centered at (cx, cy)
+        auto P = [&](float nx, float ny) { return D2D1::Point2F(cx + nx * s, cy + ny * s); };
+        sink->BeginFigure(P(0.0f, -0.82f), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddBezier(D2D1::BezierSegment(P(0.54f, -0.82f), P(0.76f, -0.42f), P(0.76f, 0.04f)));
+        sink->AddLine(P(0.76f, 0.78f));
+        sink->AddLine(P(0.45f, 0.55f));
+        sink->AddLine(P(0.22f, 0.78f));
+        sink->AddLine(P(0.00f, 0.55f));
+        sink->AddLine(P(-0.22f, 0.78f));
+        sink->AddLine(P(-0.45f, 0.55f));
+        sink->AddLine(P(-0.76f, 0.78f));
+        sink->AddLine(P(-0.76f, 0.04f));
+        sink->AddBezier(D2D1::BezierSegment(P(-0.76f, -0.42f), P(-0.54f, -0.82f), P(0.0f, -0.82f)));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+        sink->Release();
+        rt->FillGeometry(geo, bLime);
+    }
+    geo->Release();
+
+    float eyeR = s * 0.145f;
+    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx - s * 0.27f, cy - s * 0.12f), eyeR, eyeR * 1.15f), bEyes);
+    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx + s * 0.27f, cy - s * 0.12f), eyeR, eyeR * 1.15f), bEyes);
+}
+
 static void render_to(ID2D1RenderTarget* rt) {
     if (!rt) return;
 
@@ -406,68 +458,65 @@ static void render_to(ID2D1RenderTarget* rt) {
 
     rt->BeginDraw();
     rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    rt->Clear(StudioTheme::color(StudioTheme::BG_CANVAS));
+    rt->Clear(StudioTheme::color(StudioTheme::BG_VOID));
+    draw_cinema_ambient(rt, (float)WINDOW_WIDTH);
 
-    ID2D1SolidColorBrush* bSurface = nullptr;
-    ID2D1SolidColorBrush* bElevated = nullptr;
-    ID2D1SolidColorBrush* bHover = nullptr;
-    ID2D1SolidColorBrush* bActive = nullptr;
-    ID2D1SolidColorBrush* bCanvas = nullptr;
+    ID2D1SolidColorBrush* bPanel = nullptr;
+    ID2D1SolidColorBrush* bWell = nullptr;
+    ID2D1SolidColorBrush* bChip = nullptr;
+    ID2D1SolidColorBrush* bChipHover = nullptr;
+    ID2D1SolidColorBrush* bVoid = nullptr;
     ID2D1SolidColorBrush* bText = nullptr;
     ID2D1SolidColorBrush* bTextSec = nullptr;
     ID2D1SolidColorBrush* bMuted = nullptr;
     ID2D1SolidColorBrush* bTextDark = nullptr;
     ID2D1SolidColorBrush* bBorder = nullptr;
     ID2D1SolidColorBrush* bBorderStr = nullptr;
-    ID2D1SolidColorBrush* bHighlight = nullptr;
     ID2D1SolidColorBrush* bAccent = nullptr;
-    ID2D1SolidColorBrush* bAccentHover = nullptr;
-    ID2D1SolidColorBrush* bAccentBg = nullptr;
-    ID2D1SolidColorBrush* bGreen = nullptr;
-    ID2D1SolidColorBrush* bGreenBg = nullptr;
+    ID2D1SolidColorBrush* bAccentLight = nullptr;
+    ID2D1SolidColorBrush* bAccentSoft = nullptr;
+    ID2D1SolidColorBrush* bAccentBorder = nullptr;
     ID2D1SolidColorBrush* bRed = nullptr;
     ID2D1SolidColorBrush* bRedBg = nullptr;
+    ID2D1SolidColorBrush* bRedBorder = nullptr;
     ID2D1SolidColorBrush* bRedText = nullptr;
 
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_SURFACE), &bSurface);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_ELEVATED), &bElevated);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_HOVER), &bHover);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_ACTIVE), &bActive);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_CANVAS), &bCanvas);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_PANEL, StudioTheme::PANEL_ALPHA), &bPanel);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_WELL), &bWell);
+    rt->CreateSolidColorBrush(StudioTheme::color(0xFFFFFF, StudioTheme::CHIP_ALPHA), &bChip);
+    rt->CreateSolidColorBrush(StudioTheme::color(0xFFFFFF, StudioTheme::CHIP_HOVER_ALPHA), &bChipHover);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::BG_VOID), &bVoid);
     rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_PRIMARY), &bText);
     rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_SECONDARY), &bTextSec);
     rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_MUTED), &bMuted);
     rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_DARK), &bTextDark);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_PRIMARY, StudioTheme::BORDER_ALPHA), &bBorder);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_PRIMARY, StudioTheme::BORDER_STR_ALPHA), &bBorderStr);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::TEXT_PRIMARY, StudioTheme::HIGHLIGHT_ALPHA), &bHighlight);
+    rt->CreateSolidColorBrush(StudioTheme::color(0xFFFFFF, StudioTheme::BORDER_HAIRLINE), &bBorder);
+    rt->CreateSolidColorBrush(StudioTheme::color(0xFFFFFF, StudioTheme::BORDER_STRONG), &bBorderStr);
     rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::ACCENT), &bAccent);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::ACCENT_HOVER), &bAccentHover);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::ACCENT, StudioTheme::ACCENT_BG_ALPHA), &bAccentBg);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::LIVE_GREEN), &bGreen);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::LIVE_GREEN, StudioTheme::GREEN_BG_ALPHA), &bGreenBg);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::DANGER_RED), &bRed);
-    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::DANGER_RED, StudioTheme::DANGER_BG_ALPHA), &bRedBg);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::ACCENT_LIGHT), &bAccentLight);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::ACCENT, StudioTheme::ACCENT_SOFT_ALPHA), &bAccentSoft);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::ACCENT, StudioTheme::ACCENT_BORDER_ALPHA), &bAccentBorder);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::LIVE_RED), &bRed);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::LIVE_RED, StudioTheme::LIVE_RED_BG_ALPHA), &bRedBg);
+    rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::LIVE_RED, StudioTheme::LIVE_RED_BDR_ALPHA), &bRedBorder);
     rt->CreateSolidColorBrush(StudioTheme::color(StudioTheme::DANGER_TEXT), &bRedText);
 
-    // Subtle outer border
+    // Crisp hairline frame
     rt->DrawRectangle(D2D1::RectF(0.5f, 0.5f, WINDOW_WIDTH - 0.5f, WINDOW_HEIGHT - 0.5f), bBorder, 1.0f);
 
-    // --- HEADER BAR (y: 0..56) ---
-    D2D1_ROUNDED_RECT badgeRr = D2D1::RoundedRect(D2D1::RectF(20.0f, 15.0f, 44.0f, 39.0f), 6.0f, 6.0f);
-    rt->FillRoundedRectangle(badgeRr, bElevated);
-    rt->DrawRoundedRectangle(badgeRr, bBorderStr, 1.0f);
-    D2D1_ROUNDED_RECT innerScreen = D2D1::RoundedRect(D2D1::RectF(25.0f, 21.0f, 39.0f, 31.0f), 2.0f, 2.0f);
-    rt->DrawRoundedRectangle(innerScreen, bAccent, 1.4f);
-    rt->DrawLine(D2D1::Point2F(29.0f, 34.0f), D2D1::Point2F(35.0f, 34.0f), bAccent, 1.4f);
-
-    d2d_draw(rt, L"Ghost Share Jor", g_tf_title, D2D1::RectF(54.0f, 17.0f, 184.0f, 38.0f), bText);
+    // --- HEADER STUDIO PILLS (y: 0..64) ---
+    D2D1_ROUNDED_RECT brandPill = D2D1::RoundedRect(D2D1::RectF(18.0f, 16.0f, 206.0f, 48.0f), 16.0f, 16.0f);
+    rt->FillRoundedRectangle(brandPill, bPanel);
+    rt->DrawRoundedRectangle(brandPill, bBorder, 1.0f);
+    draw_ghost_emblem(rt, 36.0f, 32.0f, 9.0f, bAccent, bVoid);
+    d2d_draw(rt, L"GHOST SHARE JOR", g_tf_title, D2D1::RectF(52.0f, 23.0f, 198.0f, 42.0f), bText);
 
     bool isLive = (st.is_streaming && st.status_text == "Live");
     bool isConnecting = (st.is_streaming && st.status_text == "Connecting");
     bool isError = (!st.error_msg.empty());
 
-    std::wstring statusStr = to_wide(st.status_text.empty() ? "Standby" : st.status_text);
+    std::wstring statusStr = to_wide(st.status_text.empty() ? "STANDBY" : (isLive ? "LIVE" : (isConnecting ? "CONNECTING" : st.status_text)));
+    if (!st.is_streaming && st.status_text == "Standby") statusStr = L"STANDBY";
     if (st.is_streaming) {
         uint32_t sec = (GetTickCount() - st.start_time) / 1000;
         wchar_t tbuf[32];
@@ -475,128 +524,149 @@ static void render_to(ID2D1RenderTarget* rt) {
         statusStr += tbuf;
     }
 
-    D2D1_ROUNDED_RECT statusPill = D2D1::RoundedRect(D2D1::RectF(190.0f, 17.0f, 346.0f, 39.0f), 11.0f, 11.0f);
-    rt->FillRoundedRectangle(statusPill, isLive ? bGreenBg : (isError ? bRedBg : bSurface));
-    rt->DrawRoundedRectangle(statusPill, isLive ? bGreen : (isError ? bRed : bBorder), 1.0f);
-    ID2D1Brush* dotBrush = isLive ? bGreen : (isConnecting ? bAccent : (isError ? bRed : bMuted));
-    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(202.0f, 28.0f), 3.0f, 3.0f), dotBrush);
-    d2d_draw(rt, statusStr, g_tf_mono_sm, D2D1::RectF(212.0f, 20.5f, 340.0f, 36.5f), isLive ? bGreen : (isError ? bRedText : bTextSec));
+    D2D1_ROUNDED_RECT statusPill = D2D1::RoundedRect(D2D1::RectF(214.0f, 16.0f, 384.0f, 48.0f), 16.0f, 16.0f);
+    ID2D1Brush* stFill = isLive ? bRedBg : (isConnecting ? bAccentSoft : (isError ? bRedBg : bPanel));
+    ID2D1Brush* stBorder = isLive ? bRedBorder : (isConnecting ? bAccentBorder : (isError ? bRedBorder : bBorder));
+    ID2D1Brush* stText = isLive ? bRedText : (isConnecting ? bAccentLight : (isError ? bRedText : bTextSec));
+    rt->FillRoundedRectangle(statusPill, stFill);
+    rt->DrawRoundedRectangle(statusPill, stBorder, 1.0f);
 
-    g_rects.btnMinimize = D2D1::RectF(394.0f, 14.0f, 424.0f, 40.0f);
-    g_rects.btnClose    = D2D1::RectF(428.0f, 14.0f, 458.0f, 40.0f);
-    if (g_hover == HoverTarget::Minimize) rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnMinimize, 6.0f, 6.0f), bHover);
-    if (g_hover == HoverTarget::Close)    rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnClose, 6.0f, 6.0f), bRed);
-    d2d_draw(rt, L"-", g_tf_body_center, g_rects.btnMinimize, bTextSec);
-    d2d_draw(rt, L"x", g_tf_body_center, g_rects.btnClose, (g_hover == HoverTarget::Close) ? bText : bTextSec);
+    // Mini Signal Radar emblem inside status pill (matching Web Viewer radar motif)
+    float rcx = 232.0f;
+    float rcy = 32.0f;
+    uint32_t tick = GetTickCount();
+    rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(rcx, rcy), 8.0f, 8.0f), isLive ? bRedBorder : (isConnecting ? bAccentBorder : bBorder), 1.0f);
+    if (isLive || isConnecting) {
+        float pulse = 0.5f + 0.5f * sinf(tick * 0.006f);
+        ID2D1Brush* ringCol = isLive ? bRed : bAccent;
+        rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(rcx, rcy), 4.5f + pulse * 3.0f, 4.5f + pulse * 3.0f), ringCol, 1.0f);
+        if (pulse > 0.28f) {
+            rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(rcx, rcy), 2.8f, 2.8f), isLive ? bRed : bAccentLight);
+        }
+    } else {
+        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(rcx, rcy), 2.8f, 2.8f), isError ? bRed : bAccent);
+    }
+    d2d_draw(rt, statusStr, g_tf_mono_sm, D2D1::RectF(246.0f, 25.0f, 376.0f, 42.0f), stText);
 
-    rt->DrawLine(D2D1::Point2F(0.0f, 56.5f), D2D1::Point2F((float)WINDOW_WIDTH, 56.5f), bBorder, 1.0f);
+    g_rects.btnMinimize = D2D1::RectF(402.0f, 17.0f, 433.0f, 47.0f);
+    g_rects.btnClose    = D2D1::RectF(439.0f, 17.0f, 470.0f, 47.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnMinimize, 10.0f, 10.0f), (g_hover == HoverTarget::Minimize) ? bChipHover : bChip);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.btnMinimize, 10.0f, 10.0f), bBorder, 1.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnClose, 10.0f, 10.0f), (g_hover == HoverTarget::Close) ? bRed : bChip);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.btnClose, 10.0f, 10.0f), (g_hover == HoverTarget::Close) ? bRed : bBorder, 1.0f);
 
-    // --- CARD 1: VIDEO QUALITY (x: 20..460, y: 68..276) ---
-    D2D1_RECT_F c1 = D2D1::RectF(20.0f, 68.0f, 460.0f, 276.0f);
-    rt->FillRoundedRectangle(D2D1::RoundedRect(c1, 12.0f, 12.0f), bSurface);
-    rt->DrawRoundedRectangle(D2D1::RoundedRect(c1, 12.0f, 12.0f), bBorder, 1.0f);
+    // Crisp vector glyphs for Minimize (-) and Close (X)
+    rt->DrawLine(D2D1::Point2F(412.5f, 32.0f), D2D1::Point2F(422.5f, 32.0f), (g_hover == HoverTarget::Minimize) ? bText : bTextSec, 1.4f);
+    ID2D1Brush* xCol = (g_hover == HoverTarget::Close) ? bText : bTextSec;
+    rt->DrawLine(D2D1::Point2F(450.0f, 27.5f), D2D1::Point2F(459.0f, 36.5f), xCol, 1.4f);
+    rt->DrawLine(D2D1::Point2F(459.0f, 27.5f), D2D1::Point2F(450.0f, 36.5f), xCol, 1.4f);
 
-    d2d_draw(rt, L"Video Quality", g_tf_section, D2D1::RectF(36.0f, 82.0f, 170.0f, 100.0f), bText);
+    // --- CARD 1: VIDEO QUALITY (x: 18..470, y: 64..280) ---
+    D2D1_RECT_F c1 = D2D1::RectF(18.0f, 64.0f, 470.0f, 280.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(c1, 16.0f, 16.0f), bPanel);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(c1, 16.0f, 16.0f), bBorder, 1.0f);
+
+    d2d_draw(rt, L"Video Quality", g_tf_section, D2D1::RectF(34.0f, 79.0f, 180.0f, 98.0f), bText);
     std::wstring profileSummary = std::wstring(resolution_title(cfg.resolution)) + L" · " + std::to_wstring((int)cfg.fps) + L" fps · " + std::to_wstring(cfg.bitrate_mbps) + L" Mbps";
-    d2d_draw(rt, profileSummary, g_tf_mono_right, D2D1::RectF(180.0f, 83.0f, 444.0f, 100.0f), bTextSec);
+    d2d_draw(rt, profileSummary, g_tf_mono_right, D2D1::RectF(190.0f, 80.0f, 454.0f, 98.0f), bAccentLight);
 
-    D2D1_RECT_F resWell = D2D1::RectF(36.0f, 108.0f, 444.0f, 144.0f);
-    rt->FillRoundedRectangle(D2D1::RoundedRect(resWell, 8.0f, 8.0f), bCanvas);
-    rt->DrawRoundedRectangle(D2D1::RoundedRect(resWell, 8.0f, 8.0f), bBorder, 1.0f);
+    D2D1_RECT_F resWell = D2D1::RectF(34.0f, 106.0f, 454.0f, 144.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(resWell, 10.0f, 10.0f), bWell);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(resWell, 10.0f, 10.0f), bBorder, 1.0f);
 
     const wchar_t* resLabels[4] = { L"Source", L"1440p", L"1080p", L"720p" };
-    float resInnerW = (444.0f - 36.0f - 6.0f) / 4.0f;
+    float resInnerW = (454.0f - 34.0f - 6.0f) / 4.0f;
     for (int i = 0; i < 4; ++i) {
-        g_rects.chipRes[i] = D2D1::RectF(39.0f + i * resInnerW, 111.0f, 39.0f + (i + 1) * resInnerW, 141.0f);
+        g_rects.chipRes[i] = D2D1::RectF(37.0f + i * resInnerW, 109.0f, 37.0f + (i + 1) * resInnerW, 141.0f);
         bool sel = ((int)cfg.resolution == i);
         bool hov = (g_hover == (HoverTarget)((int)HoverTarget::Res0 + i));
         if (sel) {
-            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipRes[i], 6.0f, 6.0f), bActive);
-            rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.chipRes[i], 6.0f, 6.0f), bBorderStr, 1.0f);
+            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipRes[i], 8.0f, 8.0f), bAccentSoft);
+            rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.chipRes[i], 8.0f, 8.0f), bAccentBorder, 1.0f);
         } else if (hov) {
-            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipRes[i], 6.0f, 6.0f), bElevated);
+            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipRes[i], 8.0f, 8.0f), bChipHover);
         }
-        d2d_draw(rt, resLabels[i], g_tf_body_center, g_rects.chipRes[i], sel ? bText : (hov ? bText : bTextSec));
-        if (g_focus == (HoverTarget)((int)HoverTarget::Res0 + i)) draw_focus_outline(rt, g_rects.chipRes[i], 6.0f, bAccent);
+        d2d_draw(rt, resLabels[i], g_tf_body_center, g_rects.chipRes[i], sel ? bAccentLight : (hov ? bText : bTextSec));
+        if (g_focus == (HoverTarget)((int)HoverTarget::Res0 + i)) draw_focus_outline(rt, g_rects.chipRes[i], 8.0f, bAccent);
     }
 
-    D2D1_RECT_F fpsWell = D2D1::RectF(36.0f, 156.0f, 174.0f, 190.0f);
-    rt->FillRoundedRectangle(D2D1::RoundedRect(fpsWell, 8.0f, 8.0f), bCanvas);
-    rt->DrawRoundedRectangle(D2D1::RoundedRect(fpsWell, 8.0f, 8.0f), bBorder, 1.0f);
+    D2D1_RECT_F fpsWell = D2D1::RectF(34.0f, 156.0f, 176.0f, 192.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(fpsWell, 10.0f, 10.0f), bWell);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(fpsWell, 10.0f, 10.0f), bBorder, 1.0f);
 
     const wchar_t* fpsLabels[2] = { L"60 fps", L"30 fps" };
-    float fpsW = (174.0f - 36.0f - 6.0f) / 2.0f;
+    float fpsW = (176.0f - 34.0f - 6.0f) / 2.0f;
     for (int i = 0; i < 2; ++i) {
-        g_rects.chipFps[i] = D2D1::RectF(39.0f + i * fpsW, 159.0f, 39.0f + (i + 1) * fpsW, 187.0f);
+        g_rects.chipFps[i] = D2D1::RectF(37.0f + i * fpsW, 159.0f, 37.0f + (i + 1) * fpsW, 189.0f);
         bool sel = (i == 0 && cfg.fps == ScreenFps::Fps60) || (i == 1 && cfg.fps == ScreenFps::Fps30);
         bool hov = (g_hover == (i == 0 ? HoverTarget::Fps0 : HoverTarget::Fps1));
         if (sel) {
-            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipFps[i], 6.0f, 6.0f), bActive);
-            rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.chipFps[i], 6.0f, 6.0f), bBorderStr, 1.0f);
+            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipFps[i], 8.0f, 8.0f), bAccentSoft);
+            rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.chipFps[i], 8.0f, 8.0f), bAccentBorder, 1.0f);
         } else if (hov) {
-            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipFps[i], 6.0f, 6.0f), bElevated);
+            rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipFps[i], 8.0f, 8.0f), bChipHover);
         }
-        d2d_draw(rt, fpsLabels[i], g_tf_body_center, g_rects.chipFps[i], sel ? bText : bTextSec);
-        if (g_focus == (i == 0 ? HoverTarget::Fps0 : HoverTarget::Fps1)) draw_focus_outline(rt, g_rects.chipFps[i], 6.0f, bAccent);
+        d2d_draw(rt, fpsLabels[i], g_tf_body_center, g_rects.chipFps[i], sel ? bAccentLight : (hov ? bText : bTextSec));
+        if (g_focus == (i == 0 ? HoverTarget::Fps0 : HoverTarget::Fps1)) draw_focus_outline(rt, g_rects.chipFps[i], 8.0f, bAccent);
     }
 
     const wchar_t* bitLabels[5] = { L"8M", L"12M", L"16M", L"25M", L"40M" };
-    float bitX = 190.0f;
-    float bitW = 47.0f;
-    float bitGap = 4.75f;
+    float bitX = 188.0f;
+    float bitW = 49.0f;
+    float bitGap = 5.25f;
     for (int i = 0; i < 5; ++i) {
         float x0 = bitX + i * (bitW + bitGap);
-        g_rects.chipBit[i] = D2D1::RectF(x0, 156.0f, x0 + bitW, 190.0f);
+        g_rects.chipBit[i] = D2D1::RectF(x0, 156.0f, x0 + bitW, 192.0f);
         bool sel = (cfg.bitrate_mbps == BITRATE_PRESETS[i]);
         bool hov = (g_hover == (HoverTarget)((int)HoverTarget::Bit0 + i));
-        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipBit[i], 7.0f, 7.0f), sel ? bAccentBg : (hov ? bHover : bElevated));
-        rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.chipBit[i], 7.0f, 7.0f), sel ? bAccent : (hov ? bBorderStr : bBorder), 1.0f);
-        d2d_draw(rt, bitLabels[i], g_tf_mono_center, g_rects.chipBit[i], sel ? bAccent : bTextSec);
-        if (g_focus == (HoverTarget)((int)HoverTarget::Bit0 + i)) draw_focus_outline(rt, g_rects.chipBit[i], 7.0f, bAccent);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.chipBit[i], 10.0f, 10.0f), sel ? bAccentSoft : (hov ? bChipHover : bChip));
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.chipBit[i], 10.0f, 10.0f), sel ? bAccentBorder : (hov ? bBorderStr : bBorder), 1.0f);
+        d2d_draw(rt, bitLabels[i], g_tf_mono_center, g_rects.chipBit[i], sel ? bAccentLight : (hov ? bText : bTextSec));
+        if (g_focus == (HoverTarget)((int)HoverTarget::Bit0 + i)) draw_focus_outline(rt, g_rects.chipBit[i], 10.0f, bAccent);
     }
 
-    d2d_draw(rt, L"Custom Bitrate (2 to 60 Mbps)", g_tf_sub, D2D1::RectF(36.0f, 206.0f, 300.0f, 224.0f), bMuted);
+    d2d_draw(rt, L"Custom Bitrate (2 to 60 Mbps)", g_tf_sub, D2D1::RectF(34.0f, 208.0f, 300.0f, 226.0f), bMuted);
     std::wstring mbpsVal = std::to_wstring(cfg.bitrate_mbps) + L" Mbps";
-    d2d_draw(rt, mbpsVal, g_tf_mono_right, D2D1::RectF(310.0f, 206.0f, 444.0f, 224.0f), bAccent);
+    d2d_draw(rt, mbpsVal, g_tf_mono_right, D2D1::RectF(310.0f, 208.0f, 454.0f, 226.0f), bAccentLight);
 
-    g_rects.bitrateTrack = D2D1::RectF(36.0f, 226.0f, 444.0f, 258.0f);
-    float sLeft = 44.0f;
-    float sRight = 436.0f;
+    g_rects.bitrateTrack = D2D1::RectF(34.0f, 230.0f, 454.0f, 264.0f);
+    float sLeft = 42.0f;
+    float sRight = 446.0f;
     float norm = (float)(cfg.bitrate_mbps - 2) / 58.0f;
     float thumbX = sLeft + norm * (sRight - sLeft);
-    float trackY = 242.0f;
+    float trackY = 247.0f;
 
-    rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(sLeft, trackY - 3.0f, sRight, trackY + 3.0f), 3.0f, 3.0f), bElevated);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(sLeft, trackY - 3.0f, sRight, trackY + 3.0f), 3.0f, 3.0f), bChipHover);
     rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(sLeft, trackY - 3.0f, thumbX, trackY + 3.0f), 3.0f, 3.0f), bAccent);
 
     bool sHov = (g_hover == HoverTarget::BitrateSlider || g_dragging_bitrate);
-    D2D1_ELLIPSE thumbOuter = D2D1::Ellipse(D2D1::Point2F(thumbX, trackY), sHov ? 8.0f : 7.0f, sHov ? 8.0f : 7.0f);
-    rt->FillEllipse(thumbOuter, bText);
-    rt->DrawEllipse(thumbOuter, bCanvas, 2.0f);
-    if (g_focus == HoverTarget::BitrateSlider) draw_focus_outline(rt, g_rects.bitrateTrack, 6.0f, bAccent);
+    D2D1_ELLIPSE thumbOuter = D2D1::Ellipse(D2D1::Point2F(thumbX, trackY), sHov ? 8.5f : 7.5f, sHov ? 8.5f : 7.5f);
+    rt->FillEllipse(thumbOuter, bAccentLight);
+    rt->DrawEllipse(thumbOuter, bVoid, 2.0f);
+    if (g_focus == HoverTarget::BitrateSlider) draw_focus_outline(rt, g_rects.bitrateTrack, 8.0f, bAccent);
 
-    // --- CARD 2: AUDIO ROUTING (x: 20..460, y: 288..400) ---
-    D2D1_RECT_F c2 = D2D1::RectF(20.0f, 288.0f, 460.0f, 400.0f);
-    rt->FillRoundedRectangle(D2D1::RoundedRect(c2, 12.0f, 12.0f), bSurface);
-    rt->DrawRoundedRectangle(D2D1::RoundedRect(c2, 12.0f, 12.0f), bBorder, 1.0f);
+    // --- CARD 2: AUDIO ROUTING (x: 18..470, y: 292..406) ---
+    D2D1_RECT_F c2 = D2D1::RectF(18.0f, 292.0f, 470.0f, 406.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(c2, 16.0f, 16.0f), bPanel);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(c2, 16.0f, 16.0f), bBorder, 1.0f);
 
-    g_rects.rowAudio = D2D1::RectF(20.0f, 288.0f, 460.0f, 344.0f);
+    g_rects.rowAudio = D2D1::RectF(18.0f, 292.0f, 470.0f, 349.0f);
     if (g_hover == HoverTarget::Audio) {
-        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(24.0f, 292.0f, 456.0f, 341.0f), 8.0f, 8.0f), bElevated);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(23.0f, 296.0f, 465.0f, 345.0f), 10.0f, 10.0f), bChip);
     }
-    d2d_draw(rt, L"System Audio", g_tf_body, D2D1::RectF(36.0f, 297.0f, 340.0f, 316.0f), bText);
-    d2d_draw(rt, cfg.audio_enabled ? L"Capturing desktop loopback audio" : L"Video only (audio muted)", g_tf_sub, D2D1::RectF(36.0f, 317.0f, 360.0f, 334.0f), bMuted);
-    draw_toggle_switch(rt, 444.0f, 316.0f, cfg.audio_enabled, false, bAccent, bElevated, bBorderStr, bText);
-    if (g_focus == HoverTarget::Audio) draw_focus_outline(rt, g_rects.rowAudio, 10.0f, bAccent);
+    d2d_draw(rt, L"System Audio", g_tf_body, D2D1::RectF(34.0f, 302.0f, 350.0f, 321.0f), bText);
+    d2d_draw(rt, cfg.audio_enabled ? L"Capturing desktop loopback audio" : L"Video only (audio muted)", g_tf_sub, D2D1::RectF(34.0f, 322.0f, 370.0f, 339.0f), bMuted);
+    draw_toggle_switch(rt, 454.0f, 321.0f, cfg.audio_enabled, false, bAccent, bChipHover, bBorderStr, bText);
+    if (g_focus == HoverTarget::Audio) draw_focus_outline(rt, g_rects.rowAudio, 12.0f, bAccent);
 
-    rt->DrawLine(D2D1::Point2F(36.0f, 344.0f), D2D1::Point2F(444.0f, 344.0f), bBorder, 1.0f);
+    rt->DrawLine(D2D1::Point2F(34.0f, 349.0f), D2D1::Point2F(454.0f, 349.0f), bBorder, 1.0f);
 
-    g_rects.rowDiscord = D2D1::RectF(20.0f, 344.0f, 460.0f, 400.0f);
+    g_rects.rowDiscord = D2D1::RectF(18.0f, 349.0f, 470.0f, 406.0f);
     if (g_hover == HoverTarget::Discord) {
-        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(24.0f, 347.0f, 456.0f, 396.0f), 8.0f, 8.0f), bElevated);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(23.0f, 353.0f, 465.0f, 402.0f), 10.0f, 10.0f), bChip);
     }
     DWORD discordPid = cfg.exclude_discord ? find_discord_root_pid() : 0;
-    d2d_draw(rt, L"Exclude Discord Audio", g_tf_body, D2D1::RectF(36.0f, 353.0f, 340.0f, 372.0f), cfg.audio_enabled ? bText : bMuted);
+    d2d_draw(rt, L"Exclude Discord Audio", g_tf_body, D2D1::RectF(34.0f, 358.0f, 350.0f, 377.0f), cfg.audio_enabled ? bText : bMuted);
     std::wstring discSub;
     ID2D1Brush* discSubBrush = bMuted;
     if (!cfg.audio_enabled) {
@@ -604,7 +674,7 @@ static void render_to(ID2D1RenderTarget* rt) {
     } else if (cfg.exclude_discord) {
         if (discordPid) {
             discSub = L"Isolated cleanly (Discord PID " + std::to_wstring(discordPid) + L")";
-            discSubBrush = bGreen;
+            discSubBrush = bAccentLight;
         } else {
             discSub = L"Armed (waiting for Discord voice)";
             discSubBrush = bAccent;
@@ -612,22 +682,22 @@ static void render_to(ID2D1RenderTarget* rt) {
     } else {
         discSub = L"Discord voice included in stream";
     }
-    d2d_draw(rt, discSub, g_tf_sub, D2D1::RectF(36.0f, 373.0f, 380.0f, 390.0f), discSubBrush);
-    draw_toggle_switch(rt, 444.0f, 372.0f, cfg.exclude_discord, !cfg.audio_enabled, bAccent, bElevated, bBorderStr, bText);
-    if (g_focus == HoverTarget::Discord) draw_focus_outline(rt, g_rects.rowDiscord, 10.0f, bAccent);
+    d2d_draw(rt, discSub, g_tf_sub, D2D1::RectF(34.0f, 378.0f, 390.0f, 395.0f), discSubBrush);
+    draw_toggle_switch(rt, 454.0f, 377.0f, cfg.exclude_discord, !cfg.audio_enabled, bAccent, bChipHover, bBorderStr, bText);
+    if (g_focus == HoverTarget::Discord) draw_focus_outline(rt, g_rects.rowDiscord, 12.0f, bAccent);
 
-    // --- CARD 3: SHARE LINK & SERVER (x: 20..460, y: 412..510) ---
-    D2D1_RECT_F c3 = D2D1::RectF(20.0f, 412.0f, 460.0f, 510.0f);
-    rt->FillRoundedRectangle(D2D1::RoundedRect(c3, 12.0f, 12.0f), bSurface);
-    rt->DrawRoundedRectangle(D2D1::RoundedRect(c3, 12.0f, 12.0f), bBorder, 1.0f);
+    // --- CARD 3: VIEWER LINK & SERVER (x: 18..470, y: 418..518) ---
+    D2D1_RECT_F c3 = D2D1::RectF(18.0f, 418.0f, 470.0f, 518.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(c3, 16.0f, 16.0f), bPanel);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(c3, 16.0f, 16.0f), bBorder, 1.0f);
 
-    d2d_draw(rt, L"Viewer Link", g_tf_section, D2D1::RectF(36.0f, 424.0f, 160.0f, 442.0f), bText);
+    d2d_draw(rt, L"Viewer Link", g_tf_section, D2D1::RectF(34.0f, 431.0f, 160.0f, 449.0f), bText);
 
-    g_rects.boxServer = D2D1::RectF(196.0f, 420.0f, 444.0f, 444.0f);
+    g_rects.boxServer = D2D1::RectF(196.0f, 427.0f, 454.0f, 451.0f);
     bool srvHov = (g_hover == HoverTarget::Server);
     if (srvHov) {
-        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.boxServer, 6.0f, 6.0f), bElevated);
-        rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.boxServer, 6.0f, 6.0f), bBorderStr, 1.0f);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.boxServer, 8.0f, 8.0f), bChipHover);
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.boxServer, 8.0f, 8.0f), bBorderStr, 1.0f);
     }
     std::string hostShort = cfg.server_url;
     if (hostShort.rfind("https://", 0) == 0) hostShort = hostShort.substr(8);
@@ -635,12 +705,12 @@ static void render_to(ID2D1RenderTarget* rt) {
     while (!hostShort.empty() && hostShort.back() == '/') hostShort.pop_back();
     if (hostShort.size() > 26) hostShort = hostShort.substr(0, 24) + "..";
     std::wstring srvText = to_wide(hostShort) + L"  (Edit)";
-    d2d_draw(rt, srvText, g_tf_mono_right, D2D1::RectF(196.0f, 424.0f, 438.0f, 442.0f), srvHov ? bAccent : bMuted);
-    if (g_focus == HoverTarget::Server) draw_focus_outline(rt, g_rects.boxServer, 6.0f, bAccent);
+    d2d_draw(rt, srvText, g_tf_mono_right, D2D1::RectF(196.0f, 431.0f, 448.0f, 449.0f), srvHov ? bAccentLight : bMuted);
+    if (g_focus == HoverTarget::Server) draw_focus_outline(rt, g_rects.boxServer, 8.0f, bAccent);
 
-    D2D1_RECT_F urlWell = D2D1::RectF(36.0f, 454.0f, 286.0f, 492.0f);
-    rt->FillRoundedRectangle(D2D1::RoundedRect(urlWell, 8.0f, 8.0f), bCanvas);
-    rt->DrawRoundedRectangle(D2D1::RoundedRect(urlWell, 8.0f, 8.0f), bBorder, 1.0f);
+    D2D1_RECT_F urlWell = D2D1::RectF(34.0f, 460.0f, 292.0f, 498.0f);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(urlWell, 10.0f, 10.0f), bWell);
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(urlWell, 10.0f, 10.0f), bBorder, 1.0f);
     std::string viewUrl = cfg.server_url;
     while (!viewUrl.empty() && viewUrl.back() == '/') viewUrl.pop_back();
     viewUrl += "/r/" + cfg.room_id;
@@ -648,63 +718,62 @@ static void render_to(ID2D1RenderTarget* rt) {
     if (dispUrl.rfind("https://", 0) == 0) dispUrl = dispUrl.substr(8);
     else if (dispUrl.rfind("http://", 0) == 0) dispUrl = dispUrl.substr(7);
     if (dispUrl.size() > 33) dispUrl = ".." + dispUrl.substr(dispUrl.size() - 31);
-    d2d_draw(rt, to_wide(dispUrl), g_tf_mono_sm, D2D1::RectF(46.0f, 466.0f, 280.0f, 484.0f), bTextSec);
+    d2d_draw(rt, to_wide(dispUrl), g_tf_mono_sm, D2D1::RectF(45.0f, 472.0f, 284.0f, 490.0f), bTextSec);
 
-    g_rects.btnCopy    = D2D1::RectF(292.0f, 454.0f, 348.0f, 492.0f);
-    g_rects.btnNewRoom = D2D1::RectF(354.0f, 454.0f, 396.0f, 492.0f);
-    g_rects.btnOpenWeb = D2D1::RectF(402.0f, 454.0f, 444.0f, 492.0f);
+    g_rects.btnCopy    = D2D1::RectF(298.0f, 460.0f, 356.0f, 498.0f);
+    g_rects.btnNewRoom = D2D1::RectF(362.0f, 460.0f, 405.0f, 498.0f);
+    g_rects.btnOpenWeb = D2D1::RectF(411.0f, 460.0f, 454.0f, 498.0f);
 
     auto draw_small_btn = [&](const D2D1_RECT_F& r, const wchar_t* lbl, HoverTarget t, bool copied = false) {
         bool h = (g_hover == t);
-        rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8.0f, 8.0f), copied ? bGreenBg : (h ? bHover : bElevated));
-        rt->DrawRoundedRectangle(D2D1::RoundedRect(r, 8.0f, 8.0f), copied ? bGreen : (h ? bBorderStr : bBorder), 1.0f);
-        d2d_draw(rt, lbl, g_tf_body_center, r, copied ? bGreen : (h ? bText : bTextSec));
-        if (g_focus == t) draw_focus_outline(rt, r, 8.0f, bAccent);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(r, 10.0f, 10.0f), copied ? bAccentSoft : (h ? bChipHover : bChip));
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(r, 10.0f, 10.0f), copied ? bAccentBorder : (h ? bBorderStr : bBorder), 1.0f);
+        d2d_draw(rt, lbl, g_tf_body_center, r, copied ? bAccentLight : (h ? bText : bTextSec));
+        if (g_focus == t) draw_focus_outline(rt, r, 10.0f, bAccent);
     };
     draw_small_btn(g_rects.btnCopy, g_copied_feedback ? L"Copied" : L"Copy", HoverTarget::Copy, g_copied_feedback);
     draw_small_btn(g_rects.btnNewRoom, L"New", HoverTarget::NewRoom);
     draw_small_btn(g_rects.btnOpenWeb, L"Open", HoverTarget::OpenWeb);
 
-    // --- PRIMARY ACTION BUTTON (x: 20..460, y: 522..566) ---
-    g_rects.btnStartStop = D2D1::RectF(20.0f, 522.0f, 460.0f, 566.0f);
+    // --- PRIMARY ACTION BUTTON (x: 18..470, y: 530..576) ---
+    g_rects.btnStartStop = D2D1::RectF(18.0f, 530.0f, 470.0f, 576.0f);
     bool actHov = (g_hover == HoverTarget::StartStop);
     if (st.is_streaming) {
-        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnStartStop, 10.0f, 10.0f), actHov ? bRed : bRedBg);
-        rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.btnStartStop, 10.0f, 10.0f), bRed, 1.0f);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnStartStop, 12.0f, 12.0f), actHov ? bRed : bRedBg);
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(g_rects.btnStartStop, 12.0f, 12.0f), actHov ? bRed : bRedBorder, 1.0f);
         d2d_draw(rt, L"Stop Sharing", g_tf_btn, g_rects.btnStartStop, actHov ? bText : bRedText);
     } else {
-        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnStartStop, 10.0f, 10.0f), actHov ? bAccentHover : bAccent);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(g_rects.btnStartStop, 12.0f, 12.0f), actHov ? bAccentLight : bAccent);
         d2d_draw(rt, L"Start Sharing", g_tf_btn, g_rects.btnStartStop, bTextDark);
     }
-    if (g_focus == HoverTarget::StartStop) draw_focus_outline(rt, g_rects.btnStartStop, 10.0f, bText);
+    if (g_focus == HoverTarget::StartStop) draw_focus_outline(rt, g_rects.btnStartStop, 12.0f, bText);
 
     if (!st.error_msg.empty()) {
-        d2d_draw(rt, to_wide(st.error_msg), g_tf_hint_center, D2D1::RectF(20.0f, 572.0f, 460.0f, 592.0f), bRedText);
+        d2d_draw(rt, to_wide(st.error_msg), g_tf_hint_center, D2D1::RectF(18.0f, 586.0f, 470.0f, 608.0f), bRedText);
     } else {
-        d2d_draw(rt, L"Space to toggle  ·  Ctrl+C copy link  ·  1-4 resolution", g_tf_hint_center, D2D1::RectF(20.0f, 572.0f, 460.0f, 592.0f), bMuted);
+        d2d_draw(rt, L"Space to toggle  ·  Ctrl+C copy link  ·  1-4 resolution", g_tf_hint_center, D2D1::RectF(18.0f, 586.0f, 470.0f, 608.0f), bMuted);
     }
 
     rt->EndDraw();
 
-    bSurface->Release();
-    bElevated->Release();
-    bHover->Release();
-    bActive->Release();
-    bCanvas->Release();
+    bPanel->Release();
+    bWell->Release();
+    bChip->Release();
+    bChipHover->Release();
+    bVoid->Release();
     bText->Release();
     bTextSec->Release();
     bMuted->Release();
     bTextDark->Release();
     bBorder->Release();
     bBorderStr->Release();
-    bHighlight->Release();
     bAccent->Release();
-    bAccentHover->Release();
-    bAccentBg->Release();
-    bGreen->Release();
-    bGreenBg->Release();
+    bAccentLight->Release();
+    bAccentSoft->Release();
+    bAccentBorder->Release();
     bRed->Release();
     bRedBg->Release();
+    bRedBorder->Release();
     bRedText->Release();
 }
 
@@ -857,7 +926,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_NCHITTEST: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         ScreenToClient(hwnd, &pt);
-        if (pt.y < 56 && !hit_test(g_rects.btnClose, (float)pt.x, (float)pt.y)
+        if (pt.y < 64 && !hit_test(g_rects.btnClose, (float)pt.x, (float)pt.y)
             && !hit_test(g_rects.btnMinimize, (float)pt.x, (float)pt.y)) {
             return HTCAPTION;
         }
@@ -1066,7 +1135,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     const wchar_t* bodyF = g_fonts.bodyFamily.c_str();
     const wchar_t* monoF = g_fonts.monoFamily.c_str();
 
-    g_dw->CreateTextFormat(bodyF, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.5f, L"en-US", &g_tf_title);
+    g_dw->CreateTextFormat(bodyF, nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-US", &g_tf_title);
     g_dw->CreateTextFormat(bodyF, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.5f, L"en-US", &g_tf_section);
     g_dw->CreateTextFormat(bodyF, nullptr, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.5f, L"en-US", &g_tf_body);
     g_dw->CreateTextFormat(bodyF, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-US", &g_tf_body_center);
@@ -1112,10 +1181,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
         nullptr, nullptr, hInstance, nullptr
     );
 
-    // Enable native Windows 11 rounded corners + dark border when supported
+    // Enable native Windows 11 rounded corners + hairline obsidian border when supported
     DWORD cornerPref = DWMWCP_ROUND;
     DwmSetWindowAttribute(g_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
-    COLORREF borderCol = RGB(0x27, 0x27, 0x2B);
+    COLORREF borderCol = RGB(0x1D, 0x22, 0x1D);
     DwmSetWindowAttribute(g_hwnd, DWMWA_BORDER_COLOR, &borderCol, sizeof(borderCol));
 
     D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties();
@@ -1124,7 +1193,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     );
     g_d2d->CreateHwndRenderTarget(rtp, hrtp, &g_rt);
 
-    SetTimer(g_hwnd, 1, 500, nullptr);
+    SetTimer(g_hwnd, 1, 200, nullptr);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
