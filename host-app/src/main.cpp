@@ -33,6 +33,7 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "advapi32.lib")
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -111,6 +112,7 @@ static ShareConfig g_cfg;
 static ShareState g_state;
 static std::mutex g_mu;
 static std::atomic<bool> g_quitting{false};
+static std::atomic<uint64_t> g_stream_gen{0};
 static HANDLE g_stream_proc = nullptr;
 static HANDLE g_job = nullptr;
 static bool g_copied_feedback = false;
@@ -345,26 +347,84 @@ static void prepare_gst_env(const std::wstring& bin_dir) {
     }
 }
 
-static std::string read_log_tail(const std::wstring& path) {
-    FILE* f = nullptr;
-    if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return "";
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return ""; }
-    long sz = ftell(f);
-    if (sz <= 0) { fclose(f); return ""; }
-    long start = (sz > 500) ? (sz - 500) : 0;
-    fseek(f, start, SEEK_SET);
-    std::string data((size_t)(sz - start), '\0');
-    size_t n = fread(data.data(), 1, data.size(), f);
-    fclose(f);
-    data.resize(n);
-    while (!data.empty() && (data.back() == '\n' || data.back() == '\r' || data.back() == ' ')) data.pop_back();
-    size_t pos = data.find_last_of("\r\n");
-    if (pos != std::string::npos) data = data.substr(pos + 1);
-    if (data.size() > 140) data = data.substr(data.size() - 140);
+static std::string read_log_file(const std::wstring& path, size_t max_bytes = 8192) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return "";
+    LARGE_INTEGER fsz = {};
+    std::string data;
+    if (GetFileSizeEx(h, &fsz) && fsz.QuadPart > 0) {
+        LONGLONG start = (fsz.QuadPart > (LONGLONG)max_bytes) ? (fsz.QuadPart - (LONGLONG)max_bytes) : 0;
+        LARGE_INTEGER pos = {};
+        pos.QuadPart = start;
+        SetFilePointerEx(h, pos, nullptr, FILE_BEGIN);
+        DWORD toRead = static_cast<DWORD>(fsz.QuadPart - start);
+        data.resize(toRead);
+        DWORD got = 0;
+        if (ReadFile(h, data.data(), toRead, &got, nullptr)) data.resize(got);
+        else data.clear();
+    }
+    CloseHandle(h);
     return data;
 }
 
+static std::string read_log_error(const std::wstring& path) {
+    std::string data = read_log_file(path, 8192);
+    if (data.empty()) return "";
+
+    std::vector<std::string> lines;
+    size_t i = 0;
+    while (i < data.size()) {
+        size_t eol = data.find_first_of("\r\n", i);
+        std::string line = (eol == std::string::npos) ? data.substr(i) : data.substr(i, eol - i);
+        while (!line.empty() && (line.back() == ' ' || line.back() == '\t')) line.pop_back();
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) line.erase(line.begin());
+        if (!line.empty()) lines.push_back(line);
+        if (eol == std::string::npos) break;
+        i = eol + 1;
+    }
+
+    // Prefer actual GStreamer ERROR / HTTP failure lines over harmless teardown or context lines
+    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+        if (it->find("ERROR:") != std::string::npos ||
+            it->find("ERROR ") != std::string::npos ||
+            it->find("400 Bad Request") != std::string::npos ||
+            it->find("404 Not Found") != std::string::npos ||
+            it->find("Connection refused") != std::string::npos ||
+            it->find("failed") != std::string::npos) {
+            std::string msg = *it;
+            if (msg.size() > 120) msg = msg.substr(0, 117) + "...";
+            return msg;
+        }
+    }
+
+    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+        if (it->find("Freeing pipeline") == std::string::npos &&
+            it->find("Execution ended") == std::string::npos &&
+            it->find("Setting pipeline to NULL") == std::string::npos &&
+            it->find("Got context from element") == std::string::npos) {
+            std::string msg = *it;
+            if (msg.size() > 120) msg = msg.substr(0, 117) + "...";
+            return msg;
+        }
+    }
+    return "Stream process exited unexpectedly (see stream_log.txt)";
+}
+
+static void save_theme_pref(bool dark) {
+    DWORD val = dark ? 1 : 0;
+    RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\GhostShareJor", L"DarkMode", REG_DWORD, &val, sizeof(val));
+}
+
+static void load_theme_pref() {
+    DWORD val = 0, sz = sizeof(val);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\GhostShareJor", L"DarkMode", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
+        g_cfg.dark_mode = (val != 0);
+    }
+}
+
 static void load_config() {
+    load_theme_pref();
     std::wstring cfg_path = get_app_dir() + L"\\server.txt";
     FILE* f = nullptr;
     if (_wfopen_s(&f, cfg_path.c_str(), L"r") == 0 && f) {
@@ -393,18 +453,23 @@ static void save_config() {
 }
 
 static void stop_stream_process() {
-    HANDLE p = nullptr;
+    HANDLE dup_proc = nullptr;
     {
         std::lock_guard<std::mutex> lk(g_mu);
-        p = g_stream_proc;
-        g_stream_proc = nullptr;
+        ++g_stream_gen; // Invalidate any older watcher/launcher thread immediately
+        if (g_stream_proc) {
+            // Duplicate handle so the watcher thread remains the sole owner of pi.hProcess (zero double-CloseHandle!)
+            DuplicateHandle(GetCurrentProcess(), g_stream_proc, GetCurrentProcess(), &dup_proc,
+                            PROCESS_TERMINATE | SYNCHRONIZE, FALSE, 0);
+        }
         g_state.is_streaming = false;
         g_state.status_text = "Standby";
+        g_state.error_msg.clear();
     }
-    if (p) {
-        TerminateProcess(p, 0);
-        WaitForSingleObject(p, 1000);
-        CloseHandle(p);
+    if (dup_proc) {
+        TerminateProcess(dup_proc, 0);
+        WaitForSingleObject(dup_proc, 2000);
+        CloseHandle(dup_proc);
     }
     if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
 }
@@ -414,8 +479,10 @@ static void start_stream_process() {
     if (g_quitting.load()) return;
 
     ShareConfig cfg_copy;
+    uint64_t my_gen = 0;
     {
         std::lock_guard<std::mutex> lk(g_mu);
+        my_gen = ++g_stream_gen;
         cfg_copy = g_cfg;
         g_state.is_streaming = true;
         g_state.start_time = GetTickCount();
@@ -424,7 +491,9 @@ static void start_stream_process() {
     }
     if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
 
-    std::thread([cfg_copy]() {
+    std::thread([cfg_copy, my_gen]() {
+        if (g_stream_gen.load() != my_gen || g_quitting.load()) return;
+
         std::wstring bin_dir;
         std::wstring gst_bin = resolve_gst_bin(bin_dir);
         std::string pipe_args = build_whip_pipeline(cfg_copy);
@@ -436,16 +505,20 @@ static void start_stream_process() {
         prepare_gst_env(bin_dir);
         if (!bin_dir.empty() && GetFileAttributesW(gst_bin.c_str()) == INVALID_FILE_ATTRIBUTES) {
             std::lock_guard<std::mutex> lk(g_mu);
-            g_state.is_streaming = false;
-            g_state.status_text = "Error";
-            g_state.error_msg = "Streaming runtime missing from app folder.";
-            if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+            if (g_stream_gen.load() == my_gen) {
+                g_state.is_streaming = false;
+                g_state.status_text = "Error";
+                g_state.error_msg = "Streaming runtime missing from app folder.";
+                if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+            }
             return;
         }
 
         std::wstring log_path = get_app_dir() + L"\\stream_log.txt";
         SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
-        HANDLE hLog = CreateFileW(log_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        HANDLE hLog = CreateFileW(log_path.c_str(), GENERIC_WRITE,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                  &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
         STARTUPINFOW si = {};
         si.cb = sizeof(si);
@@ -467,36 +540,70 @@ static void start_stream_process() {
 
         if (!ok) {
             std::lock_guard<std::mutex> lk(g_mu);
-            g_state.is_streaming = false;
-            g_state.status_text = "Error";
-            g_state.error_msg = "Could not start bundled capture process.";
-            if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+            if (g_stream_gen.load() == my_gen) {
+                g_state.is_streaming = false;
+                g_state.status_text = "Error";
+                g_state.error_msg = "Could not start bundled capture process.";
+                if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+            }
             return;
         }
 
         if (g_job) AssignProcessToJobObject(g_job, pi.hProcess);
         CloseHandle(pi.hThread);
 
+        // Register process ONLY if this session is still current; otherwise kill immediately (no zombie leak)
         {
             std::lock_guard<std::mutex> lk(g_mu);
+            if (g_stream_gen.load() != my_gen || g_quitting.load()) {
+                TerminateProcess(pi.hProcess, 0);
+                CloseHandle(pi.hProcess);
+                return;
+            }
             g_stream_proc = pi.hProcess;
-            g_state.status_text = "Live";
         }
-        if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+
+        // Wait for WHIP handshake + video encoder activation (nvh264enc context, or ~4.5s fallback for CPU x264enc)
+        bool marked_live = false;
+        for (int checks = 0; checks < 30; ++checks) {
+            DWORD wr = WaitForSingleObject(pi.hProcess, 150);
+            if (wr != WAIT_TIMEOUT) break;
+            if (g_stream_gen.load() != my_gen) break;
+            std::string log_now = read_log_file(log_path, 4096);
+            if (log_now.find("Got context from element 'nvh264enc") != std::string::npos) {
+                std::lock_guard<std::mutex> lk(g_mu);
+                if (g_stream_gen.load() == my_gen) {
+                    g_state.status_text = "Live";
+                    marked_live = true;
+                }
+                if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+                break;
+            }
+        }
+        if (!marked_live && WaitForSingleObject(pi.hProcess, 0) == WAIT_TIMEOUT && g_stream_gen.load() == my_gen) {
+            std::lock_guard<std::mutex> lk(g_mu);
+            if (g_stream_gen.load() == my_gen) g_state.status_text = "Live";
+            if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
+        }
 
         WaitForSingleObject(pi.hProcess, INFINITE);
-        CloseHandle(pi.hProcess);
 
-        std::string tail = read_log_tail(log_path);
         {
             std::lock_guard<std::mutex> lk(g_mu);
-            g_stream_proc = nullptr;
-            bool unexpected = (g_state.status_text == "Live" || g_state.status_text == "Connecting");
+            if (g_stream_proc == pi.hProcess) g_stream_proc = nullptr;
+        }
+        CloseHandle(pi.hProcess);
+
+        // If a newer session or Stop already took over, exit silently without touching UI state!
+        if (g_stream_gen.load() != my_gen || g_quitting.load()) return;
+
+        std::string err = read_log_error(log_path);
+        {
+            std::lock_guard<std::mutex> lk(g_mu);
+            if (g_stream_gen.load() != my_gen) return;
             g_state.is_streaming = false;
-            if (unexpected) {
-                g_state.status_text = "Ended";
-                if (!tail.empty()) g_state.error_msg = tail;
-            }
+            g_state.status_text = "Ended";
+            g_state.error_msg = err;
         }
         if (g_hwnd) PostMessageW(g_hwnd, WM_STREAM_STATE, 0, 0);
     }).detach();
@@ -1526,6 +1633,7 @@ static void toggle_dark_mode(HWND hwnd) {
     }
     BOOL attr = isDark ? TRUE : FALSE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &attr, sizeof(attr));
+    save_theme_pref(isDark);
     update_edit_control_theme(hwnd);
     ensure_anim_timer(hwnd);
     InvalidateRect(hwnd, nullptr, FALSE);
@@ -1917,7 +2025,7 @@ static const int FOCUS_ORDER[] = {
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
-        BOOL dark = FALSE;
+        BOOL dark = g_cfg.dark_mode ? TRUE : FALSE;
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
         DWORD corner = DWMWCP_DONOTROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));

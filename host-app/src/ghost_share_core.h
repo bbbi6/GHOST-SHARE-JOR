@@ -89,13 +89,23 @@ inline DWORD find_discord_root_pid() {
     if (discord_procs.empty()) return 0;
 
     // Find the Discord process whose parent is NOT another Discord process
+    // If multiple exist, prefer the one with the most Discord children (the true root tree).
+    DWORD best_pid = 0;
+    int best_children = -1;
     for (const auto& proc : discord_procs) {
         if (discord_pids.find(proc.th32ParentProcessID) == discord_pids.end()) {
-            return proc.th32ProcessID;
+            int children = 0;
+            for (const auto& other : discord_procs) {
+                if (other.th32ParentProcessID == proc.th32ProcessID) ++children;
+            }
+            if (children > best_children) {
+                best_children = children;
+                best_pid = proc.th32ProcessID;
+            }
         }
     }
 
-    return discord_procs[0].th32ProcessID;
+    return best_pid ? best_pid : discord_procs[0].th32ProcessID;
 }
 
 inline std::string build_whip_pipeline(const ShareConfig& cfg) {
@@ -130,9 +140,10 @@ inline std::string build_whip_pipeline(const ShareConfig& cfg) {
 
     std::string video_filter = " ! d3d11convert ! video/x-raw(memory:D3D11Memory)" + scale_caps + ",format=NV12 ! d3d11download ! video/x-raw,format=NV12 ";
 
+    // Leaky bounded queues prevent live video/audio deadlock during WHIP handshake or stalls.
     std::string pipeline = 
         "d3d11screencapturesrc do-timestamp=true show-cursor=true ! video/x-raw(memory:D3D11Memory),framerate=" + fps_str + "/1 " +
-        video_filter + "! queue ! whip. ";
+        video_filter + "! queue max-size-buffers=3 leaky=downstream ! whip. ";
 
     if (cfg.audio_enabled) {
         DWORD discord_pid = 0;
@@ -140,14 +151,19 @@ inline std::string build_whip_pipeline(const ShareConfig& cfg) {
             discord_pid = find_discord_root_pid();
         }
 
+        // provide-clock=false keeps global pipeline on 1ms GstSystemClock instead of WASAPI loopback clock.
+        // continue-on-error + loopback-silence prevent device mute/switch or Discord restart from killing video.
+        std::string wasapi_common = "wasapi2src loopback=true low-latency=true continue-on-error=true loopback-silence-on-device-mute=true provide-clock=false ";
         if (cfg.exclude_discord && discord_pid != 0) {
-            pipeline += "wasapi2src loopback=true loopback-mode=exclude-process-tree loopback-target-pid=" + std::to_string(discord_pid) + " ! audio/x-raw ! audioconvert ! audioresample ! queue ! whip. ";
+            pipeline += wasapi_common + "loopback-mode=exclude-process-tree loopback-target-pid=" + std::to_string(discord_pid) + " ! audio/x-raw ! audioconvert ! audioresample ! queue max-size-time=200000000 leaky=downstream ! whip. ";
         } else {
-            pipeline += "wasapi2src loopback=true ! audio/x-raw ! audioconvert ! audioresample ! queue ! whip. ";
+            pipeline += wasapi_common + "! audio/x-raw ! audioconvert ! audioresample ! queue max-size-time=200000000 leaky=downstream ! whip. ";
         }
     }
 
-    pipeline += "whipclientsink name=whip max-bitrate=" + max_bitrate_bps + " video-caps=\"video/x-h264\" signaller::whip-endpoint=\"" + whip_endpoint + "\"";
+    int start_mbps = (mbps > 12) ? 12 : mbps;
+    std::string start_bitrate_bps = std::to_string(start_mbps * 1000000);
+    pipeline += "whipclientsink name=whip start-bitrate=" + start_bitrate_bps + " max-bitrate=" + max_bitrate_bps + " video-caps=\"video/x-h264\" stun-server=\"stun://stun.l.google.com:19302\" signaller::whip-endpoint=\"" + whip_endpoint + "\"";
 
     return pipeline;
 }
