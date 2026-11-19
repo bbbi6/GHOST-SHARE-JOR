@@ -1,34 +1,82 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light" data-motion="on">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>GHOST SHARE JOR - STUDIO VIEWER</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23050507'/><circle cx='50' cy='48' r='28' fill='%2384cc16'/><circle cx='40' cy='46' r='4.5' fill='%23050507'/><circle cx='60' cy='46' r='4.5' fill='%23050507'/></svg>">
+  <title>GHOST SHARE JOR // VIEWER</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23F7F8FA'/%3E%3Crect x='0' y='0' width='16' height='1' fill='%23111111'/%3E%3Crect x='0' y='15' width='16' height='1' fill='%23111111'/%3E%3Crect x='0' y='0' width='1' height='16' fill='%23111111'/%3E%3Crect x='15' y='0' width='1' height='16' fill='%23111111'/%3E%3Crect x='5' y='2' width='6' height='1' fill='%23111111'/%3E%3Crect x='4' y='3' width='8' height='1' fill='%23111111'/%3E%3Crect x='3' y='4' width='10' height='6' fill='%23111111'/%3E%3Crect x='5' y='3' width='6' height='6' fill='%23FFFFFF'/%3E%3Crect x='4' y='4' width='8' height='5' fill='%23FFFFFF'/%3E%3Crect x='5' y='5' width='2' height='2' fill='%23111111'/%3E%3Crect x='9' y='5' width='2' height='2' fill='%23111111'/%3E%3Crect x='4' y='10' width='2' height='1' fill='%23111111'/%3E%3Crect x='7' y='10' width='2' height='1' fill='%23111111'/%3E%3Crect x='10' y='10' width='2' height='1' fill='%23111111'/%3E%3Crect x='7' y='12' width='2' height='1' fill='%23FF4130'/%3E%3Crect x='6' y='13' width='4' height='1' fill='%23FF4130'/%3E%3C/svg%3E">
   <style>
+    /* Locked Architectural Pixel Design Tokens (Yoyu Design DNA)
+     * Synced 1:1 with tokens.css and host-app/src/theme.h
+     */
     :root {
-      --bg-void: #030305;
-      --bg-panel: rgba(12, 14, 12, 0.78);
-      --bg-chip: rgba(255, 255, 255, 0.06);
-      --bg-chip-hover: rgba(255, 255, 255, 0.13);
-      --border-hairline: rgba(255, 255, 255, 0.09);
-      --border-strong: rgba(255, 255, 255, 0.16);
-      --text-primary: #fbfbfb;
-      --text-secondary: #a1a1aa;
-      --text-muted: #71717a;
-      --accent: #84cc16;
-      --accent-light: #bef264;
-      --accent-soft: rgba(132, 204, 22, 0.18);
-      --live: #84cc16;
-      --live-red: #ef4444;
-      --font-sans: "Geist", "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+      --paper-bg: #F7F8FA;
+      --grid-line: #E4E7EE;
+      --grid-major: #CBD1DF;
+      --surface: #FFFFFF;
+      --surface-muted: #EFF1F5;
+      --surface-hud: rgba(255, 255, 255, 0.94);
+
+      --ink: #111111;
+      --ink-on-active: #FFFFFF;
+      --ink-muted: #5E636E;
+      --ink-subtle: #858890;
+
+      --border: #D4D8E2;
+      --border-strong: #111111;
+      --shadow-ink: #111111;
+
+      --ghost-outline: #111111;
+      --ghost-fill: #FFFFFF;
+      --ghost-eyes: #111111;
+      --ghost-shadow: #CBD1DF;
+
+      --accent: #FF4130;
+      --mint: #00B894;
+      --cyan: #0EA5E9;
+
+      --video-canvas: #090A0D;
+
+      --font-sans: "Yu Gothic UI", "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+      --dur-micro: 120ms;
+      --dur-hover: 160ms;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    :root[data-theme="dark"] {
+      --paper-bg: #0E0F12;
+      --grid-line: #181B22;
+      --grid-major: #2B303C;
+      --surface: #16181F;
+      --surface-muted: #111318;
+      --surface-hud: rgba(22, 24, 31, 0.94);
+
+      --ink: #F2F4F8;
+      --ink-on-active: #0E0F12;
+      --ink-muted: #9DA4B4;
+      --ink-subtle: #6E7585;
+
+      --border: #272B36;
+      --border-strong: #F2F4F8;
+      --shadow-ink: #3B4252;
+
+      --ghost-outline: #F2F4F8;
+      --ghost-fill: #F2F4F8;
+      --ghost-eyes: #0E0F12;
+      --ghost-shadow: #060709;
+
+      --accent: #FF4B3A;
+      --mint: #00D2A0;
+      --cyan: #38BDF8;
     }
 
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      border-radius: 0 !important;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
@@ -37,8 +85,8 @@
       width: 100%;
       height: 100%;
       min-height: 100dvh;
-      background-color: var(--bg-void);
-      color: var(--text-primary);
+      background-color: var(--paper-bg);
+      color: var(--ink);
       font-family: var(--font-sans);
       overflow: hidden;
       overflow-x: clip;
@@ -52,24 +100,22 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background:
-        radial-gradient(circle at 50% 45%, rgba(132, 204, 22, 0.08) 0%, transparent 55%),
-        var(--bg-void);
+      background-color: var(--video-canvas);
     }
 
     video {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      background-color: #030305;
-      transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      background-color: var(--video-canvas);
+      transition: opacity 280ms var(--ease-out);
     }
 
     video.cover {
       object-fit: cover;
     }
 
-    /* Subtle edge vignette for HUD legibility */
+    /* Subtle edge scrims only when live video is playing */
     .hud-scrim-top,
     .hud-scrim-bottom {
       position: absolute;
@@ -78,23 +124,26 @@
       pointer-events: none;
       z-index: 12;
       opacity: 0;
-      transition: opacity 0.3s ease;
+      transition: opacity 240ms var(--ease-out);
     }
 
     .hud-scrim-top {
       top: 0;
-      height: 110px;
-      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.72) 0%, transparent 100%);
+      height: 88px;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0%, transparent 100%);
     }
 
     .hud-scrim-bottom {
       bottom: 0;
-      height: 130px;
-      background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, transparent 100%);
+      height: 104px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, transparent 100%);
     }
 
-    .stage.hud-visible .hud-scrim-top,
-    .stage.hud-visible .hud-scrim-bottom,
+    .stage.is-live.hud-visible .hud-scrim-top,
+    .stage.is-live.hud-visible .hud-scrim-bottom {
+      opacity: 1;
+    }
+
     .stage.hud-visible .top-hud,
     .stage.hud-visible .bottom-dock {
       opacity: 1;
@@ -105,20 +154,20 @@
       cursor: none;
     }
 
-    /* Top Studio Bar */
+    /* Top Architectural Bar */
     .top-hud {
       position: absolute;
-      top: 20px;
-      left: 24px;
-      right: 24px;
+      top: 16px;
+      left: 16px;
+      right: 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      z-index: 20;
+      z-index: 25;
       opacity: 0;
       transform: translateY(-6px);
-      transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
       pointer-events: none;
     }
 
@@ -126,18 +175,16 @@
       pointer-events: auto;
     }
 
-    .brand-pill,
-    .telemetry-pill {
+    .brand-bar {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 14px;
-      background: var(--bg-panel);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--border-hairline);
-      border-radius: 9999px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+      height: 36px;
+      padding: 0 12px;
+      background: var(--surface-hud);
+      border: 1px solid var(--border-strong);
+      box-shadow: 3px 3px 0 var(--shadow-ink);
+      min-width: 0;
     }
 
     .brand-mark {
@@ -145,39 +192,61 @@
       height: 18px;
       display: grid;
       place-items: center;
+      flex-shrink: 0;
     }
 
     .brand-name {
-      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
       font-weight: 700;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: var(--text-primary);
+      color: var(--ink);
+      white-space: nowrap;
     }
 
-    .divider-dot {
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: var(--text-muted);
+    .bar-sep {
+      width: 1px;
+      height: 14px;
+      background: var(--border);
+      flex-shrink: 0;
     }
 
     .room-tag {
       font-family: var(--font-mono);
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .telemetry-pill {
-      font-family: var(--font-mono);
       font-size: 0.72rem;
-      color: var(--text-secondary);
+      font-weight: 600;
+      color: var(--ink-muted);
       font-variant-numeric: tabular-nums;
-      gap: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
     }
 
-    .telemetry-pill.hidden {
+    .top-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .telemetry-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      height: 36px;
+      padding: 0 12px;
+      background: var(--surface-hud);
+      border: 1px solid var(--border-strong);
+      box-shadow: 3px 3px 0 var(--shadow-ink);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .telemetry-bar.hidden {
       display: none;
     }
 
@@ -188,60 +257,148 @@
     }
 
     .stat-label {
-      color: var(--text-muted);
+      color: var(--ink-subtle);
       text-transform: uppercase;
-      font-size: 0.65rem;
+      font-size: 0.625rem;
       letter-spacing: 0.08em;
     }
 
     .stat-val {
-      color: var(--text-primary);
-      font-weight: 600;
+      color: var(--ink);
+      font-weight: 700;
     }
 
     .stat-val.good {
-      color: var(--accent-light);
+      color: var(--mint);
     }
 
-    /* Tap to Unmute Floating Pill */
-    .unmute-pill {
-      position: absolute;
-      top: 72px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 25;
+    /* Compact Dark/Light + Motion Utility Cluster (Matches Ghost Mirror & Host App) */
+    .utility-group {
       display: inline-flex;
       align-items: center;
-      gap: 9px;
-      padding: 10px 20px;
-      border-radius: 9999px;
-      border: 1px solid rgba(132, 204, 22, 0.5);
-      background: rgba(12, 16, 12, 0.88);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      color: var(--text-primary);
-      font-family: var(--font-sans);
-      font-size: 0.8125rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+      gap: 6px;
+    }
+
+    .icon-toggle,
+    .motion-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 36px;
+      background: var(--surface-hud);
+      color: var(--ink);
+      border: 1px solid var(--border-strong);
+      box-shadow: 2px 2px 0 var(--shadow-ink);
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
       cursor: pointer;
-      box-shadow: 0 12px 32px rgba(132, 204, 22, 0.22);
-      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+      transition:
+        transform var(--dur-hover) var(--ease-out),
+        box-shadow var(--dur-hover) var(--ease-out),
+        background var(--dur-micro) var(--ease-out),
+        color var(--dur-micro) var(--ease-out);
     }
 
-    .unmute-pill:hover {
+    .icon-toggle {
+      width: 36px;
+      padding: 0;
+    }
+
+    .motion-toggle {
+      gap: 6px;
+      padding: 0 10px;
+      background: var(--ink);
+      color: var(--ink-on-active);
+      border-color: var(--ink);
+    }
+
+    :root[data-motion="off"] .motion-toggle {
+      background: var(--surface-muted);
+      color: var(--ink-muted);
+      border-color: var(--border-strong);
+    }
+
+    .motion-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--mint);
+      flex-shrink: 0;
+    }
+
+    :root[data-motion="off"] .motion-dot {
+      background: var(--ink-subtle);
+    }
+
+    .icon-toggle:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0 var(--shadow-ink);
+      background: var(--ink);
+      color: var(--ink-on-active);
+    }
+
+    .motion-toggle:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0 var(--shadow-ink);
+    }
+
+    .icon-toggle:active,
+    .motion-toggle:active {
+      transform: translate(1px, 1px);
+      box-shadow: 1px 1px 0 var(--shadow-ink);
+    }
+
+    /* Tap to Unmute Architectural CTA */
+    .unmute-cta {
+      position: absolute;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 26;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      height: 40px;
+      padding: 0 18px;
+      border: 1px solid var(--border-strong);
+      background: var(--ink);
+      color: var(--ink-on-active);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+      box-shadow: 4px 4px 0 var(--accent);
+      transition:
+        transform var(--dur-hover) var(--ease-out),
+        box-shadow var(--dur-hover) var(--ease-out),
+        background var(--dur-micro) var(--ease-out);
+    }
+
+    .unmute-cta:hover {
+      transform: translateX(-50%) translate(-2px, -2px);
+      box-shadow: 6px 6px 0 var(--accent);
       background: var(--accent);
+      color: #FFFFFF;
       border-color: var(--accent);
-      color: #050703;
-      transform: translateX(-50%) translateY(-1px);
     }
 
-    .stage:not(.is-live) .unmute-pill,
-    .unmute-pill.hidden {
+    .unmute-cta:active {
+      transform: translateX(-50%) translate(1px, 1px);
+      box-shadow: 2px 2px 0 var(--shadow-ink);
+    }
+
+    .stage:not(.is-live) .unmute-cta,
+    .unmute-cta.hidden {
       display: none;
     }
 
-    /* Standby / Connecting Overlay */
+    /* Standby / Connecting / Interrupted Drafting Stage */
     .standby-overlay {
       position: absolute;
       inset: 0;
@@ -250,13 +407,16 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px;
-      background:
-        radial-gradient(circle at 50% 45%, rgba(132, 204, 22, 0.09) 0%, rgba(3, 3, 5, 0.94) 60%),
-        rgba(3, 3, 5, 0.96);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.45s;
+      padding: 72px 24px 88px;
+      background-color: var(--paper-bg);
+      background-image:
+        linear-gradient(to right, var(--grid-major) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-major) 1px, transparent 1px),
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+      background-size: 64px 64px, 64px 64px, 16px 16px, 16px 16px;
+      background-position: center center;
+      transition: opacity 280ms var(--ease-out), visibility 280ms;
     }
 
     .standby-overlay.hidden {
@@ -265,188 +425,267 @@
       pointer-events: none;
     }
 
-    .signal-radar {
+    .standby-card {
       position: relative;
-      width: 96px;
-      height: 96px;
-      display: grid;
-      place-items: center;
-      margin-bottom: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 440px;
+      padding: 28px 28px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      box-shadow: 6px 6px 0 var(--shadow-ink);
     }
 
-    .radar-ring {
+    /* Viewfinder Frame around Pixel Ghost Mascot (Zero ambient particle clutter) */
+    .ghost-viewfinder {
+      position: relative;
+      width: 144px;
+      height: 128px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      background-color: var(--paper-bg);
+      background-image:
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+      background-size: 16px 16px;
+      border: 1px solid var(--border);
+    }
+
+    .vf-corner {
       position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: 10px;
+      height: 10px;
+      border-color: var(--border-strong);
+      border-style: solid;
+      pointer-events: none;
     }
 
-    .radar-ring.pulse {
-      border-color: rgba(132, 204, 22, 0.55);
-      animation: radarPulse 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    .vf-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+    .vf-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+    .vf-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+    .vf-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+    .ghost-mascot {
+      width: 84px;
+      height: 92px;
+      image-rendering: pixelated;
+      shape-rendering: crispEdges;
+      animation: ghostStepFloat 2.2s steps(4, end) infinite;
     }
 
-    .radar-ring.spin {
-      inset: 8px;
-      border: 1.5px solid rgba(255, 255, 255, 0.06);
-      border-top-color: var(--accent);
-      animation: spin 1.1s linear infinite;
+    :root[data-motion="off"] .ghost-mascot {
+      animation: none;
     }
 
-    .radar-core {
-      width: 44px;
-      height: 44px;
-      border-radius: 14px;
-      background: rgba(132, 204, 22, 0.08);
-      border: 1px solid rgba(132, 204, 22, 0.25);
-      display: grid;
-      place-items: center;
+    @keyframes ghostStepFloat {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
     }
 
-    @keyframes radarPulse {
-      0% { transform: scale(0.88); opacity: 0.9; }
-      100% { transform: scale(1.38); opacity: 0; }
-    }
+    .ghost-eyes-normal { display: block; }
+    .ghost-eyes-blink  { display: none; }
+    .ghost-eyes-error  { display: none; }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    .ghost-mascot.is-blinking .ghost-eyes-normal { display: none; }
+    .ghost-mascot.is-blinking .ghost-eyes-blink  { display: block; }
+
+    .stage.is-error .ghost-eyes-normal,
+    .stage.is-error .ghost-eyes-blink { display: none; }
+    .stage.is-error .ghost-eyes-error { display: block; }
 
     .standby-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 10px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-muted);
       font-family: var(--font-mono);
       font-size: 0.6875rem;
-      letter-spacing: 0.2em;
+      font-weight: 700;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 10px;
+      color: var(--ink);
+    }
+
+    .kicker-sq {
+      width: 7px;
+      height: 7px;
+      background: var(--cyan);
+      flex-shrink: 0;
+    }
+
+    .stage.is-error .kicker-sq {
+      background: var(--accent);
+    }
+
+    .stage.is-standby .kicker-sq {
+      background: var(--ink-subtle);
     }
 
     .standby-title {
-      font-size: clamp(1.35rem, 2.5vw, 1.75rem);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: clamp(1.25rem, 2.4vw, 1.5rem);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      color: var(--ink);
       margin-bottom: 8px;
       text-align: center;
     }
 
     .standby-desc {
       font-size: 0.875rem;
-      color: var(--text-secondary);
+      color: var(--ink-muted);
       text-align: center;
-      max-width: 380px;
+      max-width: 340px;
       line-height: 1.5;
-      margin-bottom: 22px;
+      margin-bottom: 20px;
     }
 
     .standby-meta {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 7px 14px;
-      border-radius: 9999px;
-      border: 1px solid var(--border-hairline);
-      background: rgba(255, 255, 255, 0.03);
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      color: var(--text-muted);
-    }
-
-    /* Bottom Floating Cinema Dock */
-    .bottom-dock {
-      position: absolute;
-      bottom: 22px;
-      left: 24px;
-      right: 24px;
-      z-index: 20;
+      width: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 10px 14px;
-      background: var(--bg-panel);
-      backdrop-filter: blur(22px);
-      -webkit-backdrop-filter: blur(22px);
-      border: 1px solid var(--border-hairline);
-      border-radius: 16px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface-muted);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-muted);
+    }
+
+    .standby-meta strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    /* Bottom Architectural Control Dock */
+    .bottom-dock {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 25;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 10px;
+      background: var(--surface-hud);
+      border: 1px solid var(--border-strong);
+      box-shadow: 4px 4px 0 var(--shadow-ink);
       opacity: 0;
       transform: translateY(8px);
-      transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
     }
 
     .dock-left,
     .dock-right {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
-    .live-pill {
+    .live-badge {
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      padding: 5px 10px;
-      border-radius: 8px;
-      background: rgba(132, 204, 22, 0.14);
-      border: 1px solid rgba(132, 204, 22, 0.35);
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-muted);
       font-family: var(--font-mono);
-      font-size: 0.7rem;
+      font-size: 0.6875rem;
       font-weight: 700;
       letter-spacing: 0.1em;
-      color: var(--accent-light);
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      white-space: nowrap;
     }
 
-    .live-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+    .live-sq {
+      width: 7px;
+      height: 7px;
+      background: var(--ink-subtle);
+      flex-shrink: 0;
+    }
+
+    .stage.is-live .live-badge {
+      background: var(--ink);
+      color: var(--ink-on-active);
+      border-color: var(--ink);
+    }
+
+    .stage.is-live .live-sq {
       background: var(--accent);
-      animation: liveBlink 1.6s ease-in-out infinite;
+      animation: liveBlink 1.2s steps(2, end) infinite;
     }
 
-    .stage:not(.is-live) .live-pill {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: var(--border-hairline);
-      color: var(--text-muted);
+    .stage.is-error .live-badge {
+      border-color: var(--accent);
+      color: var(--accent);
     }
 
-    .stage:not(.is-live) .live-dot {
-      background: var(--text-muted);
+    .stage.is-error .live-sq {
+      background: var(--accent);
+    }
+
+    :root[data-motion="off"] .stage.is-live .live-sq {
       animation: none;
     }
 
     @keyframes liveBlink {
       0%, 100% { opacity: 1; }
-      50% { opacity: 0.35; }
+      50% { opacity: 0.25; }
     }
 
     .watch-timer {
       font-family: var(--font-mono);
       font-size: 0.75rem;
-      color: var(--text-secondary);
+      font-weight: 600;
+      color: var(--ink-muted);
       font-variant-numeric: tabular-nums;
-      padding-left: 4px;
+      padding-left: 2px;
+      white-space: nowrap;
     }
 
     .volume-group {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 4px 10px 4px 4px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding-right: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface-muted);
+    }
+
+    .volume-group .ctrl-btn {
+      border: none;
+      border-right: 1px solid var(--border);
+      box-shadow: none;
+      background: transparent;
+      height: 30px;
+    }
+
+    .volume-group .ctrl-btn:hover {
+      transform: none;
+      box-shadow: none;
+      background: var(--surface);
     }
 
     .volume-slider {
       -webkit-appearance: none;
       appearance: none;
-      width: 72px;
-      height: 4px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.18);
-      accent-color: var(--accent);
+      width: 76px;
+      height: 6px;
+      background: var(--border);
       outline: none;
       cursor: pointer;
     }
@@ -454,16 +693,25 @@
     .volume-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--accent-light);
+      width: 10px;
+      height: 16px;
+      background: var(--ink);
+      border: 1px solid var(--border-strong);
       cursor: pointer;
-      transition: transform 0.15s ease;
+      transition: background var(--dur-micro) var(--ease-out);
     }
 
     .volume-slider::-webkit-slider-thumb:hover {
-      transform: scale(1.2);
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .volume-slider::-moz-range-thumb {
+      width: 10px;
+      height: 16px;
+      background: var(--ink);
+      border: 1px solid var(--border-strong);
+      cursor: pointer;
     }
 
     .ctrl-btn {
@@ -471,65 +719,137 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
-      height: 34px;
-      padding: 0 12px;
-      border-radius: 10px;
-      border: 1px solid transparent;
-      background: var(--bg-chip);
-      color: var(--text-primary);
-      font-family: var(--font-sans);
-      font-size: 0.78rem;
-      font-weight: 500;
+      height: 32px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       line-height: 1;
+      white-space: nowrap;
       cursor: pointer;
-      transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+      transition:
+        transform var(--dur-hover) var(--ease-out),
+        box-shadow var(--dur-hover) var(--ease-out),
+        background var(--dur-micro) var(--ease-out),
+        border-color var(--dur-micro) var(--ease-out),
+        color var(--dur-micro) var(--ease-out);
     }
 
     .ctrl-btn:hover {
-      background: var(--bg-chip-hover);
-      border-color: var(--border-hairline);
+      border-color: var(--border-strong);
+      transform: translate(-1px, -1px);
+      box-shadow: 2px 2px 0 var(--shadow-ink);
     }
 
     .ctrl-btn:active {
-      transform: scale(0.97);
+      transform: translate(1px, 1px);
+      box-shadow: none;
     }
 
     .ctrl-btn.active {
-      background: var(--accent-soft);
-      border-color: rgba(132, 204, 22, 0.45);
-      color: var(--accent-light);
+      background: var(--ink);
+      border-color: var(--ink);
+      color: var(--ink-on-active);
     }
 
     .ctrl-btn:focus-visible,
-    .unmute-pill:focus-visible {
+    .unmute-cta:focus-visible,
+    .icon-toggle:focus-visible,
+    .motion-toggle:focus-visible,
+    .volume-slider:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
 
-    @media (max-width: 680px) {
-      .top-hud {
-        top: 12px;
-        left: 12px;
-        right: 12px;
-        flex-wrap: wrap;
-      }
-      .telemetry-pill {
+    @media (max-width: 780px) {
+      .telemetry-bar {
         display: none;
       }
-      .bottom-dock {
-        bottom: 12px;
-        left: 12px;
-        right: 12px;
-        padding: 8px 10px;
+      .room-tag {
+        max-width: 120px;
       }
+    }
+
+    @media (max-width: 600px) {
+      .top-hud {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        gap: 6px;
+      }
+      .brand-bar {
+        padding: 0 8px;
+        gap: 6px;
+        height: 34px;
+      }
+      .brand-name {
+        font-size: 0.65rem;
+        letter-spacing: 0.06em;
+      }
+      .icon-toggle {
+        width: 34px;
+        height: 34px;
+      }
+      .motion-toggle {
+        height: 34px;
+        padding: 0 8px;
+        font-size: 0.625rem;
+      }
+      .bar-sep,
+      .room-tag {
+        display: none;
+      }
+      .standby-overlay {
+        padding: 60px 12px 72px;
+      }
+      .standby-card {
+        padding: 20px 16px 16px;
+      }
+      .standby-meta {
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 0.66rem;
+      }
+      .bottom-dock {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        padding: 6px 8px;
+        gap: 6px;
+      }
+      .dock-left,
+      .dock-right {
+        gap: 5px;
+      }
+      .live-badge {
+        height: 30px;
+        padding: 0 7px;
+        font-size: 0.625rem;
+      }
+      .watch-timer,
       .volume-slider,
       .btn-label {
         display: none;
       }
       .volume-group {
-        padding: 0;
+        padding-right: 0;
         border: none;
         background: transparent;
+      }
+      .volume-group .ctrl-btn {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        height: 30px;
+      }
+      .ctrl-btn {
+        height: 30px;
+        width: 32px;
+        padding: 0;
       }
     }
 
@@ -550,62 +870,151 @@
     <div class="hud-scrim-top"></div>
     <div class="hud-scrim-bottom"></div>
 
-    <!-- Top Studio Header -->
+    <!-- Top Architectural Studio Bar -->
     <header class="top-hud">
-      <div class="brand-pill">
+      <div class="brand-bar">
         <div class="brand-mark" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2C7.58 2 4 5.58 4 10v10l2.67-2 2.66 2L12 18l2.67 2 2.66-2L20 20V10c0-4.42-3.58-8-8-8z" fill="#84cc16"/>
-            <circle cx="9.5" cy="10" r="1.4" fill="#030305"/>
-            <circle cx="14.5" cy="10" r="1.4" fill="#030305"/>
+          <!-- 8x8 Pixel Ghost Brand Mark -->
+          <svg width="16" height="16" viewBox="0 0 8 8" shape-rendering="crispEdges">
+            <rect x="2" y="0" width="4" height="1" fill="var(--ink)"/>
+            <rect x="1" y="1" width="6" height="5" fill="var(--ink)"/>
+            <rect x="2" y="1" width="4" height="4" fill="var(--surface)"/>
+            <rect x="2" y="2" width="1" height="2" fill="var(--ink)"/>
+            <rect x="5" y="2" width="1" height="2" fill="var(--ink)"/>
+            <rect x="1" y="6" width="2" height="1" fill="var(--ink)"/>
+            <rect x="5" y="6" width="2" height="1" fill="var(--ink)"/>
+            <rect x="3" y="7" width="2" height="1" fill="var(--accent)"/>
           </svg>
         </div>
         <span class="brand-name">GHOST SHARE JOR</span>
-        <span class="divider-dot"></span>
-        <span class="room-tag" id="roomLabel">room / default</span>
+        <span class="bar-sep"></span>
+        <span class="room-tag" id="roomLabel">ROOM // default</span>
       </div>
 
-      <div class="telemetry-pill" id="telemetryPill">
-        <span class="stat-item"><span class="stat-label">RES</span> <span class="stat-val" id="statRes">--</span></span>
-        <span class="divider-dot"></span>
-        <span class="stat-item"><span class="stat-label">FPS</span> <span class="stat-val" id="statFps">--</span></span>
-        <span class="divider-dot"></span>
-        <span class="stat-item"><span class="stat-label">RATE</span> <span class="stat-val" id="statRate">--</span></span>
-        <span class="divider-dot"></span>
-        <span class="stat-item"><span class="stat-label">RTT</span> <span class="stat-val good" id="statRtt">--</span></span>
+      <div class="top-right">
+        <div class="telemetry-bar" id="telemetryPill">
+          <span class="stat-item"><span class="stat-label">RES</span> <span class="stat-val" id="statRes">--</span></span>
+          <span class="bar-sep"></span>
+          <span class="stat-item"><span class="stat-label">FPS</span> <span class="stat-val" id="statFps">--</span></span>
+          <span class="bar-sep"></span>
+          <span class="stat-item"><span class="stat-label">RATE</span> <span class="stat-val" id="statRate">--</span></span>
+          <span class="bar-sep"></span>
+          <span class="stat-item"><span class="stat-label">RTT</span> <span class="stat-val good" id="statRtt">--</span></span>
+        </div>
+
+        <!-- Compact Theme Toggle right next to MOTION (Matches Ghost Mirror & Host App) -->
+        <div class="utility-group">
+          <button class="icon-toggle" id="themeToggle" type="button" title="Toggle Dark / Light Blueprint (T)" aria-label="Toggle Dark or Light theme">
+            <svg id="themeIconMoon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <svg id="themeIconSun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" style="display:none">
+              <circle cx="12" cy="12" r="4"/>
+              <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+              <line x1="4.93" y1="4.93" x2="7.05" y2="7.05"/><line x1="16.95" y1="16.95" x2="19.07" y2="19.07"/>
+              <line x1="19.07" y1="4.93" x2="16.95" y2="7.05"/><line x1="7.05" y1="16.95" x2="4.93" y2="19.07"/>
+            </svg>
+          </button>
+
+          <button class="motion-toggle" id="motionToggle" type="button" title="Toggle Motion / Static" aria-label="Toggle motion animations">
+            <span class="motion-dot" aria-hidden="true"></span>
+            <span id="motionLabel">MOTION</span>
+          </button>
+        </div>
       </div>
     </header>
 
     <!-- Tap to Unmute Banner -->
-    <button class="unmute-pill" id="unmuteBtn" type="button" aria-label="Unmute stream audio">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-      Tap to Unmute Stream Audio
+    <button class="unmute-cta" id="unmuteBtn" type="button" aria-label="Unmute stream audio">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      TAP TO UNMUTE AUDIO
     </button>
 
-    <!-- Standby / Connecting Overlay -->
+    <!-- Standby / Connecting Architectural Stage -->
     <section class="standby-overlay" id="overlay" aria-live="polite">
-      <div class="signal-radar" aria-hidden="true">
-        <div class="radar-ring pulse"></div>
-        <div class="radar-ring spin"></div>
-        <div class="radar-core">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2C7.58 2 4 5.58 4 10v10l2.67-2 2.66 2L12 18l2.67 2 2.66-2L20 20V10c0-4.42-3.58-8-8-8z" fill="#84cc16"/>
-            <circle cx="9.5" cy="10" r="1.4" fill="#050507"/>
-            <circle cx="14.5" cy="10" r="1.4" fill="#050507"/>
+      <div class="standby-card">
+        <div class="ghost-viewfinder" aria-hidden="true">
+          <span class="vf-corner vf-tl"></span>
+          <span class="vf-corner vf-tr"></span>
+          <span class="vf-corner vf-bl"></span>
+          <span class="vf-corner vf-br"></span>
+
+          <!-- Crisp 16x18 Pixel Ghost Mascot + Vermilion Prism -->
+          <svg class="ghost-mascot" id="ghostMascot" viewBox="0 0 16 18" shape-rendering="crispEdges">
+            <!-- Ground drop shadow -->
+            <rect x="4" y="13" width="8" height="1" fill="var(--ghost-shadow)"/>
+            <!-- Ghost Silhouette Outline -->
+            <rect x="5" y="1" width="6" height="1" fill="var(--ghost-outline)"/>
+            <rect x="4" y="2" width="8" height="1" fill="var(--ghost-outline)"/>
+            <rect x="3" y="3" width="10" height="1" fill="var(--ghost-outline)"/>
+            <rect x="2" y="4" width="12" height="7" fill="var(--ghost-outline)"/>
+            <rect x="2" y="11" width="3" height="1" fill="var(--ghost-outline)"/>
+            <rect x="6" y="11" width="4" height="1" fill="var(--ghost-outline)"/>
+            <rect x="11" y="11" width="3" height="1" fill="var(--ghost-outline)"/>
+            <rect x="3" y="12" width="1" height="1" fill="var(--ghost-outline)"/>
+            <rect x="7" y="12" width="2" height="1" fill="var(--ghost-outline)"/>
+            <rect x="12" y="12" width="1" height="1" fill="var(--ghost-outline)"/>
+            <!-- Ghost Body Fill -->
+            <rect x="5" y="2" width="6" height="1" fill="var(--ghost-fill)"/>
+            <rect x="4" y="3" width="8" height="1" fill="var(--ghost-fill)"/>
+            <rect x="3" y="4" width="10" height="7" fill="var(--ghost-fill)"/>
+            <rect x="3" y="11" width="1" height="1" fill="var(--ghost-fill)"/>
+            <rect x="7" y="11" width="2" height="1" fill="var(--ghost-fill)"/>
+            <rect x="12" y="11" width="1" height="1" fill="var(--ghost-fill)"/>
+
+            <!-- Normal Eyes (track mouse cursor subtly) -->
+            <g class="ghost-eyes-normal" id="ghostEyesNormal">
+              <rect x="5" y="6" width="2" height="2" fill="var(--ghost-eyes)"/>
+              <rect x="9" y="6" width="2" height="2" fill="var(--ghost-eyes)"/>
+            </g>
+
+            <!-- Blink Eyes -->
+            <g class="ghost-eyes-blink">
+              <rect x="5" y="7" width="2" height="1" fill="var(--ghost-eyes)"/>
+              <rect x="9" y="7" width="2" height="1" fill="var(--ghost-eyes)"/>
+            </g>
+
+            <!-- Error / Interrupted X_X Eyes -->
+            <g class="ghost-eyes-error">
+              <rect x="4" y="5" width="1" height="1" fill="var(--accent)"/>
+              <rect x="6" y="5" width="1" height="1" fill="var(--accent)"/>
+              <rect x="5" y="6" width="1" height="1" fill="var(--accent)"/>
+              <rect x="4" y="7" width="1" height="1" fill="var(--accent)"/>
+              <rect x="6" y="7" width="1" height="1" fill="var(--accent)"/>
+              <rect x="9" y="5" width="1" height="1" fill="var(--accent)"/>
+              <rect x="11" y="5" width="1" height="1" fill="var(--accent)"/>
+              <rect x="10" y="6" width="1" height="1" fill="var(--accent)"/>
+              <rect x="9" y="7" width="1" height="1" fill="var(--accent)"/>
+              <rect x="11" y="7" width="1" height="1" fill="var(--accent)"/>
+              <rect x="6" y="9" width="4" height="1" fill="var(--ghost-eyes)"/>
+            </g>
+
+            <!-- Signature Vermilion Prism Base -->
+            <rect x="7" y="15" width="2" height="1" fill="var(--accent)"/>
+            <rect x="6" y="16" width="4" height="1" fill="var(--accent)"/>
+            <rect x="5" y="17" width="6" height="1" fill="var(--accent)"/>
           </svg>
         </div>
+
+        <div class="standby-kicker">
+          <span class="kicker-sq" aria-hidden="true"></span>
+          <span id="statusKicker">WEBRTC // WHEP</span>
+        </div>
+        <h1 class="standby-title" id="statusTitle">Connecting to Room</h1>
+        <p class="standby-desc" id="statusDesc">Establishing low-latency peer handshake with media server...</p>
+        <div class="standby-meta">
+          <span id="standbyMeta">ROOM // default</span>
+          <span>AUTO-RETRY 3S</span>
+        </div>
       </div>
-      <div class="standby-kicker" id="statusKicker">WEBRTC WHEP STREAM</div>
-      <h1 class="standby-title" id="statusTitle">Connecting to Room</h1>
-      <p class="standby-desc" id="statusDesc">Establishing low-latency peer handshake with media server...</p>
-      <div class="standby-meta" id="standbyMeta">Room ID: default</div>
     </section>
 
-    <!-- Bottom Cinema Control Dock -->
+    <!-- Bottom Architectural Control Dock -->
     <footer class="bottom-dock">
       <div class="dock-left">
-        <div class="live-pill">
-          <span class="live-dot"></span>
+        <div class="live-badge">
+          <span class="live-sq" aria-hidden="true"></span>
           <span id="liveText">STANDBY</span>
         </div>
         <span class="watch-timer" id="watchTimer">00:00</span>
@@ -614,29 +1023,29 @@
       <div class="dock-right">
         <div class="volume-group">
           <button class="ctrl-btn" id="audioToggle" type="button" aria-label="Toggle mute (M)">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
             <span class="btn-label">Unmute</span>
           </button>
           <input class="volume-slider" id="volumeSlider" type="range" min="0" max="1" step="0.02" value="1" aria-label="Stream volume">
         </div>
 
         <button class="ctrl-btn" id="fitBtn" type="button" title="Toggle Fit / Fill" aria-label="Toggle video fit mode">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15l3-3 2 2 5-5"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><rect x="3" y="5" width="18" height="14"/><path d="M7 15l3-3 2 2 5-5"/></svg>
           <span class="btn-label" id="fitLabel">Fit</span>
         </button>
 
         <button class="ctrl-btn" id="statsBtn" type="button" title="Toggle Telemetry" aria-label="Toggle stream stats">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
           <span class="btn-label">Stats</span>
         </button>
 
         <button class="ctrl-btn" id="pipBtn" type="button" title="Picture in Picture (P)" aria-label="Picture in Picture">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><rect x="2" y="4" width="20" height="16"/><rect x="12" y="11" width="7" height="5"/></svg>
           <span class="btn-label">PiP</span>
         </button>
 
         <button class="ctrl-btn" id="fullscreenBtn" type="button" title="Fullscreen (F)" aria-label="Toggle fullscreen">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 3H3v5M21 8V3h-5M16 21h5v-5M3 16v5h5"/></svg>
           <span class="btn-label">Full</span>
         </button>
       </div>
@@ -645,15 +1054,16 @@
 
   <script>
     // Extract room id from URL: /r/{room_id} or ?room={room_id}
+    const urlParams = new URLSearchParams(window.location.search);
     const pathParts = window.location.pathname.split('/').filter(Boolean);
     let roomId = pathParts[pathParts.length - 1] || '';
     if (!roomId || roomId === 'r' || roomId.toLowerCase().endsWith('.html')) {
-      const urlParams = new URLSearchParams(window.location.search);
       roomId = urlParams.get('room') || 'default';
     }
-    document.getElementById('roomLabel').textContent = `room / ${roomId}`;
-    document.getElementById('standbyMeta').textContent = `Room ID: ${roomId}`;
+    document.getElementById('roomLabel').textContent = `ROOM // ${roomId}`;
+    document.getElementById('standbyMeta').innerHTML = `ROOM // <strong>${roomId.replace(/[<>&"']/g, '')}</strong>`;
 
+    const rootEl = document.documentElement;
     const stage = document.getElementById('stage');
     const video = document.getElementById('videoPlayer');
     const overlay = document.getElementById('overlay');
@@ -672,10 +1082,74 @@
     const watchTimer = document.getElementById('watchTimer');
     const liveText = document.getElementById('liveText');
 
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIconMoon = document.getElementById('themeIconMoon');
+    const themeIconSun = document.getElementById('themeIconSun');
+    const motionToggle = document.getElementById('motionToggle');
+    const motionLabel = document.getElementById('motionLabel');
+    const ghostMascot = document.getElementById('ghostMascot');
+    const ghostEyesNormal = document.getElementById('ghostEyesNormal');
+
     const statRes = document.getElementById('statRes');
     const statFps = document.getElementById('statFps');
     const statRate = document.getElementById('statRate');
     const statRtt = document.getElementById('statRtt');
+
+    // Theme (Light Paper / Dark Blueprint) + Motion State
+    function applyTheme(theme) {
+      const isDark = theme === 'dark';
+      rootEl.setAttribute('data-theme', isDark ? 'dark' : 'light');
+      themeIconMoon.style.display = isDark ? 'none' : 'block';
+      themeIconSun.style.display = isDark ? 'block' : 'none';
+      try { localStorage.setItem('gsj-theme', isDark ? 'dark' : 'light'); } catch (_) {}
+    }
+
+    function applyMotion(enabled) {
+      rootEl.setAttribute('data-motion', enabled ? 'on' : 'off');
+      motionLabel.textContent = enabled ? 'MOTION' : 'STATIC';
+      if (!enabled) ghostEyesNormal.setAttribute('transform', 'translate(0, 0)');
+      try { localStorage.setItem('gsj-motion', enabled ? 'on' : 'off'); } catch (_) {}
+    }
+
+    const queryTheme = urlParams.get('theme');
+    let savedTheme = 'light';
+    let savedMotion = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try {
+      const t = localStorage.getItem('gsj-theme');
+      if (t === 'dark' || t === 'light') savedTheme = t;
+      const m = localStorage.getItem('gsj-motion');
+      if (m === 'on' || m === 'off') savedMotion = (m === 'on');
+    } catch (_) {}
+    if (queryTheme === 'dark' || queryTheme === 'light') savedTheme = queryTheme;
+    applyTheme(savedTheme);
+    applyMotion(savedMotion);
+
+    themeToggle.addEventListener('click', () => {
+      const next = rootEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+    });
+
+    motionToggle.addEventListener('click', () => {
+      const next = rootEl.getAttribute('data-motion') !== 'on';
+      applyMotion(next);
+    });
+
+    // Subtle quantized pixel eye-tracking & natural blink while Standby is visible
+    setInterval(() => {
+      if (overlay.classList.contains('hidden') || rootEl.getAttribute('data-motion') !== 'on') return;
+      ghostMascot.classList.add('is-blinking');
+      setTimeout(() => ghostMascot.classList.remove('is-blinking'), 130);
+    }, 3800);
+
+    window.addEventListener('mousemove', (e) => {
+      if (overlay.classList.contains('hidden') || rootEl.getAttribute('data-motion') !== 'on') return;
+      const rect = ghostMascot.getBoundingClientRect();
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.45;
+      const dx = Math.max(-1, Math.min(1, Math.round((e.clientX - cx) / 140)));
+      const dy = Math.max(-1, Math.min(1, Math.round((e.clientY - cy) / 140)));
+      ghostEyesNormal.setAttribute('transform', `translate(${dx}, ${dy})`);
+    }, { passive: true });
 
     const whepEndpoint = `${window.location.origin}/${roomId}/whep`;
 
@@ -781,10 +1255,10 @@
       }
       stopStatsPolling();
       stopWatchTimer();
-      stage.classList.remove('is-live');
-      liveText.textContent = 'STANDBY';
+      stage.classList.remove('is-live', 'is-error', 'is-standby');
+      liveText.textContent = 'CONNECT';
 
-      statusKicker.textContent = 'WEBRTC WHEP STREAM';
+      statusKicker.textContent = 'WEBRTC // WHEP';
       statusTitle.textContent = 'Connecting to Room';
       statusDesc.textContent = `Establishing low-latency handshake for "${roomId}"...`;
       overlay.classList.remove('hidden');
@@ -822,6 +1296,7 @@
       pc.onconnectionstatechange = () => {
         if (!pc) return;
         if (pc.connectionState === 'connected') {
+          stage.classList.remove('is-error', 'is-standby');
           stage.classList.add('is-live');
           liveText.textContent = 'LIVE';
           overlay.classList.add('hidden');
@@ -830,8 +1305,9 @@
           startStatsPolling();
           wakeHud();
         } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          stage.classList.remove('is-live');
-          liveText.textContent = 'STANDBY';
+          stage.classList.remove('is-live', 'is-standby');
+          stage.classList.add('is-error');
+          liveText.textContent = 'SIGNAL LOST';
           statusKicker.textContent = 'SIGNAL INTERRUPTED';
           statusTitle.textContent = 'Host Disconnected';
           statusDesc.textContent = 'Waiting for host to resume sharing. Reconnecting in 3s...';
@@ -875,7 +1351,8 @@
         await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
         video.play().catch(() => {});
       } catch (err) {
-        stage.classList.remove('is-live');
+        stage.classList.remove('is-live', 'is-error');
+        stage.classList.add('is-standby');
         liveText.textContent = 'STANDBY';
         statusKicker.textContent = 'STANDBY MODE';
         statusTitle.textContent = 'Waiting for Host';
@@ -890,8 +1367,8 @@
       retryTimeout = setTimeout(startWHEP, 3000);
     }
 
-    const iconSoundOn = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
-    const iconSoundOff = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+    const iconSoundOn = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+    const iconSoundOff = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
 
     function syncAudioUi() {
       if (video.muted || video.volume === 0) {
@@ -969,6 +1446,7 @@
       const key = e.key.toLowerCase();
       if (key === 'm') toggleMute();
       else if (key === 'f') toggleFullscreen();
+      else if (key === 't') themeToggle.click();
       else if (key === 'p' && document.pictureInPictureEnabled) pipBtn.click();
     });
 

@@ -1,40 +1,37 @@
 # GHOST SHARE JOR - Design System
 
-Obsidian Cinema + Lime Green (applied consistently across both Web Viewer `server/www/index.html` and Windows Host App `host-app/src/main.cpp`).
+Yoyu Architectural Pixel UI — Dual Theme (**Light Drafting Paper** + **Dark Obsidian Blueprint**), applied 1:1 across both the Windows Host App (`host-app/src/main.cpp` + `host-app/src/theme.h`) and the Web Viewer (`server/www/index.html` + `server/www/tokens.css`).
 
-## 1. Color Palette & Tokens
+## 1. Locked Color Palette & Tokens
 
-| Token | CSS / Host Value | Role |
-|---|---|---|
-| `--bg-void` | `#030305` | Primary viewport / cinema canvas with radial lime bloom |
-| `--bg-panel` | `rgba(12, 14, 12, 0.78)` (`#0C0E0C` native) | Floating panels, top pills, cinema dock cards |
-| `--bg-chip` | `rgba(255, 255, 255, 0.06)` | Control buttons, segmented wells, switch off-track, URL well |
-| `--bg-chip-hover` | `rgba(255, 255, 255, 0.13)` | Hover fill on chips and buttons |
-| `--border-hairline` | `rgba(255, 255, 255, 0.09)` | 1px subtle panel & control borders |
-| `--border-strong` | `rgba(255, 255, 255, 0.16)` | Focus / hover hairline border |
-| `--text-primary` | `#fbfbfb` | Primary headings, controls, active states |
-| `--text-secondary` | `#a1a1aa` | Body descriptions, inactive tabs |
-| `--text-muted` | `#71717a` | Hints, secondary metadata keys |
-| `--accent` | `#84cc16` | Lime Green - Ghost emblem, Signal Radar, bitrate bar, switches, primary CTA |
-| `--accent-light` | `#bef264` | Active chip text, slider thumb/readout, live accents |
-| `--accent-soft` | `rgba(132, 204, 22, 0.18)` | Active control fill |
-| `--accent-border` | `rgba(132, 204, 22, 0.45)` | Active control border |
-| `--live-red` | `#ef4444` | Live crimson pill (`rgba(239, 68, 68, 0.14)` fill), Stop CTA, error states |
+| Token | Light Drafting Paper | Dark Obsidian Blueprint | Role |
+|---|---|---|---|
+| `--paper-bg` | `#F7F8FA` | `#0E0F12` | Drafting canvas background |
+| `--grid-line` | `#E4E7EE` | `#181B22` | 16px graph-paper grid hairlines |
+| `--grid-major` | `#CBD1DF` | `#2B303C` | 64px major drafting crosshairs / lines |
+| `--surface` | `#FFFFFF` | `#16181F` | Elevated architectural tiles, cards, controls |
+| `--surface-muted` | `#EFF1F5` | `#111318` | Recessed wells, URL input, segmented rail |
+| `--ink` | `#111111` | `#F2F4F8` | Primary typography, active solid fill |
+| `--ink-on-active` | `#FFFFFF` | `#0E0F12` | Inverted text on active solid ink blocks |
+| `--ink-muted` | `#5E636E` | `#9DA4B4` | Secondary labels, room metadata, descriptions |
+| `--ink-subtle` | `#858890` | `#6E7585` | Captions, inactive switches, stat labels |
+| `--border` | `#D4D8E2` | `#272B36` | 1px standard architectural dividers |
+| `--border-strong` | `#111111` | `#F2F4F8` | Primary frames, hovered borders, HUD borders |
+| `--shadow-ink` | `#111111` | `#3B4252` | Hard pixel offset shadows (`2–6px`, zero blur) |
+| `--accent` | `#FF4130` | `#FF4B3A` | Vermilion — prism base, LIVE indicator, Stop CTA, error `X_X` |
+| `--mint` | `#00B894` | `#00D2A0` | Healthy telemetry, audio meter, active audio switches |
+| `--cyan` | `#0EA5E9` | `#38BDF8` | Handshake / connecting indicator |
 
-## 2. Signature Visual Motifs
+## 2. Signature Architectural Motifs
 
-- **Ambient Lime Bloom**: Subtle radial gradient behind top/center stage (`rgba(132, 204, 22, 0.08)` -> `transparent`).
-- **Ghost Emblem**: Minimal domed `#84cc16` silhouette with `#030305` eyes inside a `9999px` brand pill.
-- **Signal Radar Indicator**: Concentric radar ring with sweeping / pulsing lime signal dot for `STANDBY`, `CONNECTING`, and `LIVE` state.
+- **Drafting Graph-Paper Stage**: `16px` grid lines with `64px` major ticks/crosshairs behind the hero mascot stage.
+- **Viewfinder Pixel Ghost Mascot**: 16×16 crisp pixel ghost framed by 4 sharp corner brackets `[ ]` standing above a Vermilion prism — cursor-tracking eyes, natural blink, happy `^ ^` + mint blush + live bar meter when streaming, and `X_X` vermilion eyes on error/disconnect. Zero floating ambient clutter.
+- **Header Utility Pair**: Compact Moon/Sun Dark Mode toggle placed directly beside the `MOTION / STATIC` switch (`T` shortcut toggles theme on both desktop and web).
+- **Direct Segmented Controls**: Zero blind-cycling buttons; direct pickers for Resolution (`SOURCE | 1440p | 1080p | 720p`), FPS (`60 HZ | 30 HZ`), Bitrate Presets (`8M | 12M | 16M | 25M | 40M`), and 20-segment draggable Pixel Bitrate Fader.
 
-## 3. Typography & Copy Rules
+## 3. Typography & Radii
 
-- **Web Sans**: `-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif`
-- **Desktop Sans**: Auto-selected `Segoe UI Variable Text` (fallback `Segoe UI`) via DirectWrite system font lookup
-- **Telemetry Mono**: `ui-monospace, "Cascadia Mono", "Consolas", monospace` (`tabular-nums`)
-- **Copy voice**: Direct, concise, zero em-dashes
-
-## 4. Radii & Architecture
-
-- **Radii**: `9999px` full pills (brand badge, status/telemetry pills), `16px` primary cards & cinema dock, `10px` control buttons & chips (`DWMWCP_ROUND` on Windows 11 host window)
-- **CSS Delivery**: Shared tokens live in `server/www/tokens.css`, with critical `:root` variables mirrored inline inside `server/www/index.html` and mapped 1:1 in `host-app/src/theme.h`
+- **Sans**: `Yu Gothic UI` (fallback `Segoe UI Variable Display`, `Segoe UI`)
+- **Mono**: `IBM Plex Mono` (fallback `JetBrains Mono`, `Cascadia Mono`, `Consolas`) with `tabular-nums`
+- **Radii**: Strictly `0px` architectural corners across all surfaces (`DWMWCP_DONOTROUND` on Windows 11 host window)
+- **Motion**: `160ms` exponential ease-out tactile hover lift + hard offset shadow, respecting `prefers-reduced-motion` and the in-app `MOTION / STATIC` toggle.

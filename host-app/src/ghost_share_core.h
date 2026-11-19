@@ -28,6 +28,8 @@ struct ShareConfig {
     bool audio_enabled = true;
     bool exclude_discord = true;                             // True by default: isolate Discord!
     bool use_nvenc = true;
+    bool motion_enabled = true;                              // Header MOTION toggle
+    bool dark_mode = false;                                  // Header Light Paper / Dark Blueprint toggle
 };
 
 struct ShareState {

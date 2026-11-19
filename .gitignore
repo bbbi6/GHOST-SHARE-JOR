@@ -7,10 +7,12 @@
 host-app/src/ghost.res
 host-app/main.obj
 
-# Logs
+# Local runtime config & logs (never leak personal server URLs or logs)
 *.log
 stream_log.txt
 dist/GhostShareJor/stream_log.txt
+server.txt
+dist/GhostShareJor/server.txt
 
 # Bundled GStreamer runtime (downloaded next to the exe, not source)
 dist/GhostShareJor/gst/

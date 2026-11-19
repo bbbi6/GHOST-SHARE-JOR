@@ -1,20 +1,66 @@
-/* Obsidian Cinema + Lime Green Tokens */
+/* Locked Architectural Pixel Design Tokens (Yoyu Design DNA)
+ * Synced 1:1 with host-app/src/theme.h and server/www/index.html
+ */
+
 :root {
-  --bg-void: #030305;
-  --bg-panel: rgba(12, 14, 12, 0.78);
-  --bg-chip: rgba(255, 255, 255, 0.06);
-  --bg-chip-hover: rgba(255, 255, 255, 0.13);
-  --border-hairline: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --text-primary: #fbfbfb;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --accent: #84cc16;
-  --accent-light: #bef264;
-  --accent-soft: rgba(132, 204, 22, 0.18);
-  --accent-border: rgba(132, 204, 22, 0.45);
-  --live: #84cc16;
-  --live-red: #ef4444;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  --paper-bg: #F7F8FA;
+  --grid-line: #E4E7EE;
+  --grid-major: #CBD1DF;
+  --surface: #FFFFFF;
+  --surface-muted: #EFF1F5;
+  --surface-hud: rgba(255, 255, 255, 0.94);
+
+  --ink: #111111;
+  --ink-on-active: #FFFFFF;
+  --ink-muted: #5E636E;
+  --ink-subtle: #858890;
+
+  --border: #D4D8E2;
+  --border-strong: #111111;
+  --shadow-ink: #111111;
+
+  --ghost-outline: #111111;
+  --ghost-fill: #FFFFFF;
+  --ghost-eyes: #111111;
+  --ghost-shadow: #CBD1DF;
+
+  --accent: #FF4130;
+  --mint: #00B894;
+  --cyan: #0EA5E9;
+
+  --video-canvas: #090A0D;
+
+  --font-sans: "Yu Gothic UI", "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --dur-micro: 120ms;
+  --dur-hover: 160ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme="dark"] {
+  --paper-bg: #0E0F12;
+  --grid-line: #181B22;
+  --grid-major: #2B303C;
+  --surface: #16181F;
+  --surface-muted: #111318;
+  --surface-hud: rgba(22, 24, 31, 0.94);
+
+  --ink: #F2F4F8;
+  --ink-on-active: #0E0F12;
+  --ink-muted: #9DA4B4;
+  --ink-subtle: #6E7585;
+
+  --border: #272B36;
+  --border-strong: #F2F4F8;
+  --shadow-ink: #3B4252;
+
+  --ghost-outline: #F2F4F8;
+  --ghost-fill: #F2F4F8;
+  --ghost-eyes: #0E0F12;
+  --ghost-shadow: #060709;
+
+  --accent: #FF4B3A;
+  --mint: #00D2A0;
+  --cyan: #38BDF8;
 }
