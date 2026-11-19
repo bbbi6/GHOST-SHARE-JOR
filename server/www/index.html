@@ -1005,7 +1005,7 @@
         <p class="standby-desc" id="statusDesc">Establishing low-latency peer handshake with media server...</p>
         <div class="standby-meta">
           <span id="standbyMeta">ROOM // default</span>
-          <span id="retryMeta">AUTO-RETRY 1.2S</span>
+          <span>AUTO-RETRY 1.5S</span>
         </div>
       </div>
     </section>
@@ -1152,61 +1152,22 @@
     }, { passive: true });
 
     const whepEndpoint = `${window.location.origin}/${roomId}/whep`;
-    const retryMeta = document.getElementById('retryMeta');
 
     let pc = null;
     let sessionGen = 0;
     let retryTimeout = null;
-    let firstFrameTimeout = null;
-    let muteStallTimeout = null;
     let statsInterval = null;
     let timerInterval = null;
     let connectedAt = 0;
     let prevBytesReceived = 0;
-    let prevFramesDecoded = 0;
-    let frozenTicks = 0;
     let prevStatsTime = 0;
     let idleTimeout = null;
     let statsVisible = true;
-    let hasRenderedFrame = false;
 
     statsBtn.classList.add('active');
     if (!document.pictureInPictureEnabled) {
       pipBtn.style.display = 'none';
     }
-
-    function clearVideoStream() {
-      hasRenderedFrame = false;
-      clearTimeout(firstFrameTimeout);
-      clearTimeout(muteStallTimeout);
-      if (video.srcObject) {
-        try {
-          video.srcObject.getTracks().forEach((t) => t.stop());
-        } catch (_) {}
-        video.srcObject = null;
-      }
-    }
-
-    function markLiveWithFrame() {
-      if (hasRenderedFrame) return;
-      if (video.videoWidth === 0 && video.readyState < 2) return;
-      hasRenderedFrame = true;
-      clearTimeout(firstFrameTimeout);
-      clearTimeout(muteStallTimeout);
-      stage.classList.remove('is-error', 'is-standby');
-      stage.classList.add('is-live');
-      liveText.textContent = 'LIVE';
-      overlay.classList.add('hidden');
-      startWatchTimer();
-      startStatsPolling();
-      wakeHud();
-    }
-
-    video.addEventListener('loadeddata', markLiveWithFrame);
-    video.addEventListener('playing', markLiveWithFrame);
-    video.addEventListener('resize', () => {
-      if (video.videoWidth > 0) markLiveWithFrame();
-    });
 
     function wakeHud() {
       stage.classList.add('hud-visible');
@@ -1247,19 +1208,14 @@
     function startStatsPolling() {
       clearInterval(statsInterval);
       prevBytesReceived = 0;
-      prevFramesDecoded = 0;
-      frozenTicks = 0;
       prevStatsTime = 0;
-      const myGen = sessionGen;
       statsInterval = setInterval(async () => {
-        if (myGen !== sessionGen || !pc || pc.connectionState !== 'connected') return;
+        if (!pc || pc.connectionState !== 'connected') return;
         try {
           const stats = await pc.getStats();
           let rttMs = null;
-          let sawVideo = false;
           stats.forEach((report) => {
             if (report.type === 'inbound-rtp' && report.kind === 'video') {
-              sawVideo = true;
               if (report.frameWidth && report.frameHeight) {
                 statRes.textContent = `${report.frameWidth}x${report.frameHeight}`;
               }
@@ -1271,14 +1227,6 @@
                 const mbps = ((report.bytesReceived - prevBytesReceived) * 8) / ((now - prevStatsTime) * 1000);
                 statRate.textContent = `${mbps.toFixed(1)} Mbps`;
               }
-              const frames = report.framesDecoded || 0;
-              if (frames > prevFramesDecoded) {
-                frozenTicks = 0;
-                if (!hasRenderedFrame && video.videoWidth > 0) markLiveWithFrame();
-              } else {
-                frozenTicks++;
-              }
-              prevFramesDecoded = frames;
               prevBytesReceived = report.bytesReceived;
               prevStatsTime = now;
             }
@@ -1289,12 +1237,8 @@
           if (rttMs !== null) {
             statRtt.textContent = `${rttMs} ms`;
           }
-          // If host restarted (e.g., bitrate/resolution switch) and video stalled for 3s, reconnect immediately
-          if (sawVideo && frozenTicks >= 3) {
-            triggerReconnect('STREAM UPDATED', 'Reconnecting to Host', 'Host changed stream settings. Re-syncing feed...', 600);
-          }
         } catch (_) {}
-      }, 1000);
+      }, 1500);
     }
 
     function stopStatsPolling() {
@@ -1305,26 +1249,6 @@
       statRtt.textContent = '--';
     }
 
-    function triggerReconnect(kicker, title, desc, delayMs = 1200) {
-      if (pc) {
-        try { pc.close(); } catch (_) {}
-        pc = null;
-      }
-      clearVideoStream();
-      stopStatsPolling();
-      stopWatchTimer();
-      stage.classList.remove('is-live', 'is-standby');
-      stage.classList.add('is-error');
-      liveText.textContent = 'RECONNECT';
-      statusKicker.textContent = kicker;
-      statusTitle.textContent = title;
-      statusDesc.textContent = desc;
-      retryMeta.textContent = `RETRYING IN ${(delayMs / 1000).toFixed(1)}S`;
-      overlay.classList.remove('hidden');
-      wakeHud();
-      scheduleRetry(delayMs);
-    }
-
     async function startWHEP() {
       clearTimeout(retryTimeout);
       const myGen = ++sessionGen;
@@ -1333,7 +1257,12 @@
         try { pc.close(); } catch (_) {}
         pc = null;
       }
-      clearVideoStream();
+      // Root-cause fix for Black Screen on reconnect: always clear old dead MediaStream first!
+      if (video.srcObject) {
+        try { video.srcObject.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        video.srcObject = null;
+      }
+
       stopStatsPolling();
       stopWatchTimer();
       stage.classList.remove('is-live', 'is-error', 'is-standby');
@@ -1342,7 +1271,6 @@
       statusKicker.textContent = 'WEBRTC // WHEP';
       statusTitle.textContent = 'Connecting to Room';
       statusDesc.textContent = `Establishing low-latency handshake for "${roomId}"...`;
-      retryMeta.textContent = 'HANDSHAKING...';
       overlay.classList.remove('hidden');
       wakeHud();
 
@@ -1351,72 +1279,74 @@
       });
       pc = currentPc;
 
-      // Fresh MediaStream per connection so dead tracks from previous sessions never cause black screen
-      const sessionStream = new MediaStream();
-
       currentPc.addTransceiver('video', { direction: 'recvonly' });
       currentPc.addTransceiver('audio', { direction: 'recvonly' });
 
       currentPc.ontrack = (event) => {
         if (myGen !== sessionGen) return;
-        const track = event.track;
-        if (!sessionStream.getTracks().includes(track)) {
-          sessionStream.addTrack(track);
+        if (!video.srcObject) {
+          if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+          } else {
+            video.srcObject = new MediaStream([event.track]);
+          }
+        } else {
+          if (video.srcObject instanceof MediaStream && !video.srcObject.getTracks().includes(event.track)) {
+            video.srcObject.addTrack(event.track);
+          }
         }
-        if (video.srcObject !== sessionStream) {
-          video.srcObject = sessionStream;
-        }
-        if (track.kind === 'video') {
-          track.onunmute = () => {
+        if (event.track.kind === 'video') {
+          event.track.onended = () => {
             if (myGen !== sessionGen) return;
-            clearTimeout(muteStallTimeout);
-            video.play().catch(() => {});
-            if (video.videoWidth > 0) markLiveWithFrame();
-          };
-          track.onmute = () => {
-            if (myGen !== sessionGen) return;
-            clearTimeout(muteStallTimeout);
-            muteStallTimeout = setTimeout(() => {
-              if (myGen === sessionGen && track.muted) {
-                triggerReconnect('STREAM INTERRUPTED', 'Re-syncing Video', 'Host restarted or paused stream. Reconnecting...', 800);
-              }
-            }, 2200);
-          };
-          track.onended = () => {
-            if (myGen !== sessionGen) return;
-            triggerReconnect('STREAM ENDED', 'Host Reconnecting', 'Host ended or updated stream. Reconnecting...', 800);
+            handleDisconnected();
           };
         }
         video.play().catch(() => {});
       };
 
-      const handleConnState = () => {
+      video.onloadedmetadata = () => {
+        video.play().catch(() => {});
+      };
+      video.oncanplay = () => {
+        video.play().catch(() => {});
+      };
+
+      function handleDisconnected() {
+        if (myGen !== sessionGen) return;
+        stage.classList.remove('is-live', 'is-standby');
+        stage.classList.add('is-error');
+        liveText.textContent = 'SIGNAL LOST';
+        statusKicker.textContent = 'SIGNAL INTERRUPTED';
+        statusTitle.textContent = 'Host Disconnected';
+        statusDesc.textContent = 'Waiting for host to resume sharing. Reconnecting in 1.5s...';
+        overlay.classList.remove('hidden');
+        stopStatsPolling();
+        stopWatchTimer();
+        scheduleRetry(1500);
+      }
+
+      currentPc.onconnectionstatechange = () => {
         if (myGen !== sessionGen || pc !== currentPc) return;
-        const st = currentPc.connectionState;
-        const ice = currentPc.iceConnectionState;
-        if (st === 'connected' || ice === 'connected' || ice === 'completed') {
-          statusKicker.textContent = 'SYNCING VIDEO';
-          statusTitle.textContent = 'Waiting for Keyframe';
-          statusDesc.textContent = 'Connected to server. Waiting for first video frame...';
-          retryMeta.textContent = 'ICE CONNECTED';
+        if (currentPc.connectionState === 'connected') {
+          stage.classList.remove('is-error', 'is-standby');
+          stage.classList.add('is-live');
+          liveText.textContent = 'LIVE';
+          overlay.classList.add('hidden');
           video.play().catch(() => {});
-          if (video.videoWidth > 0 && video.readyState >= 2) {
-            markLiveWithFrame();
-          } else {
-            clearTimeout(firstFrameTimeout);
-            firstFrameTimeout = setTimeout(() => {
-              if (myGen === sessionGen && !hasRenderedFrame) {
-                triggerReconnect('NO VIDEO FRAME', 'Re-syncing Stream', 'No video keyframe received yet. Retrying...', 900);
-              }
-            }, 4500);
-          }
-        } else if (st === 'failed' || st === 'disconnected' || ice === 'failed' || ice === 'disconnected') {
-          triggerReconnect('SIGNAL INTERRUPTED', 'Host Disconnected', 'Waiting for host to resume sharing. Reconnecting...', 1200);
+          startWatchTimer();
+          startStatsPolling();
+          wakeHud();
+        } else if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'disconnected') {
+          handleDisconnected();
         }
       };
 
-      currentPc.onconnectionstatechange = handleConnState;
-      currentPc.oniceconnectionstatechange = handleConnState;
+      currentPc.oniceconnectionstatechange = () => {
+        if (myGen !== sessionGen || pc !== currentPc) return;
+        if (currentPc.iceConnectionState === 'failed' || currentPc.iceConnectionState === 'disconnected') {
+          handleDisconnected();
+        }
+      };
 
       try {
         const offer = await currentPc.createOffer();
@@ -1434,7 +1364,7 @@
               }
             };
             currentPc.addEventListener('icegatheringstatechange', checkState);
-            setTimeout(resolve, 650);
+            setTimeout(resolve, 1000);
           }
         });
         if (myGen !== sessionGen) return;
@@ -1456,24 +1386,18 @@
         video.play().catch(() => {});
       } catch (err) {
         if (myGen !== sessionGen) return;
-        if (pc === currentPc) {
-          try { pc.close(); } catch (_) {}
-          pc = null;
-        }
-        clearVideoStream();
         stage.classList.remove('is-live', 'is-error');
         stage.classList.add('is-standby');
         liveText.textContent = 'STANDBY';
         statusKicker.textContent = 'STANDBY MODE';
         statusTitle.textContent = 'Waiting for Host';
-        statusDesc.textContent = 'Screen share is not live yet. Automatically retrying...';
-        retryMeta.textContent = 'AUTO-RETRY 1.2S';
+        statusDesc.textContent = 'Screen share is not live yet. Automatically retrying in 1.5s...';
         overlay.classList.remove('hidden');
-        scheduleRetry(1200);
+        scheduleRetry(1500);
       }
     }
 
-    function scheduleRetry(delayMs = 1200) {
+    function scheduleRetry(delayMs = 1500) {
       clearTimeout(retryTimeout);
       retryTimeout = setTimeout(startWHEP, delayMs);
     }

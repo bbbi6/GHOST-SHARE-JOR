@@ -598,6 +598,13 @@ static void start_stream_process() {
         if (g_stream_gen.load() != my_gen || g_quitting.load()) return;
 
         std::string err = read_log_error(log_path);
+        // If D3D11 desktop duplication briefly sent EOS while actively live (e.g., UAC/display switch), auto-recover
+        if (marked_live && (err.find("EOS") != std::string::npos || err.find("exited unexpectedly") != std::string::npos)) {
+            if (g_hwnd && g_stream_gen.load() == my_gen && !g_quitting.load()) {
+                PostMessageW(g_hwnd, WM_TIMER, TIMER_APPLY_CFG, 0);
+                return;
+            }
+        }
         {
             std::lock_guard<std::mutex> lk(g_mu);
             if (g_stream_gen.load() != my_gen) return;

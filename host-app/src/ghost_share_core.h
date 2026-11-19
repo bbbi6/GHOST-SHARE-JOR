@@ -140,10 +140,9 @@ inline std::string build_whip_pipeline(const ShareConfig& cfg) {
 
     std::string video_filter = " ! d3d11convert ! video/x-raw(memory:D3D11Memory)" + scale_caps + ",format=NV12 ! d3d11download ! video/x-raw,format=NV12 ";
 
-    // Leaky bounded queues prevent live video/audio deadlock during WHIP handshake or stalls.
     std::string pipeline = 
         "d3d11screencapturesrc do-timestamp=true show-cursor=true ! video/x-raw(memory:D3D11Memory),framerate=" + fps_str + "/1 " +
-        video_filter + "! queue max-size-buffers=3 leaky=downstream ! whip. ";
+        video_filter + "! queue ! whip. ";
 
     if (cfg.audio_enabled) {
         DWORD discord_pid = 0;
@@ -151,19 +150,14 @@ inline std::string build_whip_pipeline(const ShareConfig& cfg) {
             discord_pid = find_discord_root_pid();
         }
 
-        // provide-clock=false keeps global pipeline on 1ms GstSystemClock instead of WASAPI loopback clock.
-        // continue-on-error + loopback-silence prevent device mute/switch or Discord restart from killing video.
-        std::string wasapi_common = "wasapi2src loopback=true low-latency=true continue-on-error=true loopback-silence-on-device-mute=true provide-clock=false ";
         if (cfg.exclude_discord && discord_pid != 0) {
-            pipeline += wasapi_common + "loopback-mode=exclude-process-tree loopback-target-pid=" + std::to_string(discord_pid) + " ! audio/x-raw ! audioconvert ! audioresample ! queue max-size-time=200000000 leaky=downstream ! whip. ";
+            pipeline += "wasapi2src loopback=true loopback-mode=exclude-process-tree loopback-target-pid=" + std::to_string(discord_pid) + " ! audio/x-raw ! audioconvert ! audioresample ! queue ! whip. ";
         } else {
-            pipeline += wasapi_common + "! audio/x-raw ! audioconvert ! audioresample ! queue max-size-time=200000000 leaky=downstream ! whip. ";
+            pipeline += "wasapi2src loopback=true ! audio/x-raw ! audioconvert ! audioresample ! queue ! whip. ";
         }
     }
 
-    int start_mbps = (mbps > 12) ? 12 : mbps;
-    std::string start_bitrate_bps = std::to_string(start_mbps * 1000000);
-    pipeline += "whipclientsink name=whip start-bitrate=" + start_bitrate_bps + " max-bitrate=" + max_bitrate_bps + " video-caps=\"video/x-h264\" stun-server=\"stun://stun.l.google.com:19302\" signaller::whip-endpoint=\"" + whip_endpoint + "\"";
+    pipeline += "whipclientsink name=whip max-bitrate=" + max_bitrate_bps + " video-caps=\"video/x-h264\" signaller::whip-endpoint=\"" + whip_endpoint + "\"";
 
     return pipeline;
 }
