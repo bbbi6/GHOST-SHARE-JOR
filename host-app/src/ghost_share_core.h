@@ -130,7 +130,15 @@ inline std::string build_whip_pipeline(const ShareConfig& cfg) {
     std::string whip_endpoint = base_url + "/" + cfg.room_id + "/whip";
 
     std::string scale_caps = "";
-    if (cfg.resolution == ScreenResolution::Res1440p) {
+    if (cfg.resolution == ScreenResolution::Source) {
+        // Lock SOURCE to the exact physical primary monitor resolution so webrtcsink GCC
+        // cannot negotiate d3d11convert down to 640x360!
+        int natW = GetSystemMetrics(SM_CXSCREEN);
+        int natH = GetSystemMetrics(SM_CYSCREEN);
+        if (natW > 0 && natH > 0) {
+            scale_caps = ",width=" + std::to_string(natW) + ",height=" + std::to_string(natH);
+        }
+    } else if (cfg.resolution == ScreenResolution::Res1440p) {
         scale_caps = ",width=2560,height=1440";
     } else if (cfg.resolution == ScreenResolution::Res1080p) {
         scale_caps = ",width=1920,height=1080";
@@ -157,7 +165,9 @@ inline std::string build_whip_pipeline(const ShareConfig& cfg) {
         }
     }
 
-    pipeline += "whipclientsink name=whip max-bitrate=" + max_bitrate_bps + " video-caps=\"video/x-h264\" signaller::whip-endpoint=\"" + whip_endpoint + "\"";
+    int min_mbps = (mbps / 2 > 4) ? (mbps / 2) : (mbps < 4 ? mbps : 4);
+    std::string min_bitrate_bps = std::to_string(min_mbps * 1000000);
+    pipeline += "whipclientsink name=whip min-bitrate=" + min_bitrate_bps + " start-bitrate=" + max_bitrate_bps + " max-bitrate=" + max_bitrate_bps + " video-caps=\"video/x-h264\" signaller::whip-endpoint=\"" + whip_endpoint + "\"";
 
     return pipeline;
 }
