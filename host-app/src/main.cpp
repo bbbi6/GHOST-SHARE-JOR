@@ -345,6 +345,16 @@ static void prepare_gst_env(const std::wstring& bin_dir) {
         SetEnvironmentVariableW(L"GST_PLUGIN_SYSTEM_PATH_1_0", plugins.c_str());
         SetEnvironmentVariableW(L"GST_PLUGIN_PATH_1_0", plugins.c_str());
     }
+    std::wstring scanner = prefix + L"\\libexec\\gstreamer-1.0\\gst-plugin-scanner.exe";
+    if (GetFileAttributesW(scanner.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        SetEnvironmentVariableW(L"GST_PLUGIN_SCANNER", scanner.c_str());
+    }
+    std::wstring gioMods = prefix + L"\\lib\\gio\\modules";
+    if (GetFileAttributesW(gioMods.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        SetEnvironmentVariableW(L"GIO_MODULE_DIR", gioMods.c_str());
+    }
+    std::wstring regPath = get_app_dir() + L"\\gst-registry.bin";
+    SetEnvironmentVariableW(L"GST_REGISTRY", regPath.c_str());
 }
 
 static std::string read_log_file(const std::wstring& path, size_t max_bytes = 8192) {
